@@ -103,6 +103,7 @@ type CreatePaymentInput struct {
 	ChannelID        uint
 	UseBalance       bool
 	ClientIP         string
+	OpenID           string
 	Context          context.Context
 	ReturnBizType    string
 	ReturnBusinessNo string
@@ -126,6 +127,7 @@ type CreateWalletRechargePaymentInput struct {
 	Currency  string
 	Remark    string
 	ClientIP  string
+	OpenID    string
 	Context   context.Context
 }
 
@@ -139,7 +141,36 @@ func hasProviderResult(payment *models.Payment) bool {
 	if payment == nil {
 		return false
 	}
-	return strings.TrimSpace(payment.PayURL) != "" || strings.TrimSpace(payment.QRCode) != ""
+	if strings.TrimSpace(payment.PayURL) != "" || strings.TrimSpace(payment.QRCode) != "" {
+		return true
+	}
+	return len(extractPaymentJSAPIParams(payment.ProviderPayload)) > 0
+}
+
+func extractPaymentJSAPIParams(payload models.JSON) map[string]string {
+	raw, ok := payload["jsapi_params"]
+	if !ok {
+		return nil
+	}
+	result := map[string]string{}
+	switch params := raw.(type) {
+	case map[string]string:
+		for key, value := range params {
+			if strings.TrimSpace(value) != "" {
+				result[key] = value
+			}
+		}
+	case map[string]interface{}:
+		for key, value := range params {
+			if str, ok := value.(string); ok && strings.TrimSpace(str) != "" {
+				result[key] = str
+			}
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
 
 func shouldMarkFulfilling(order *models.Order) bool {
@@ -606,6 +637,7 @@ func (s *PaymentService) CreateWalletRechargePayment(input CreateWalletRechargeP
 	if err := s.applyProviderPayment(CreatePaymentInput{
 		ChannelID:        input.ChannelID,
 		ClientIP:         input.ClientIP,
+		OpenID:           input.OpenID,
 		Context:          input.Context,
 		ReturnBizType:    "recharge",
 		ReturnBusinessNo: recharge.RechargeNo,

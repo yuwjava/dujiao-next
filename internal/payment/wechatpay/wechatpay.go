@@ -3,8 +3,13 @@ package wechatpay
 import (
 	"bytes"
 	"context"
+	"crypto"
+	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
+	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -77,14 +82,16 @@ type CreateInput struct {
 	Description string
 	ClientIP    string
 	NotifyURL   string
+	OpenID      string
 }
 
 // CreateResult 创建微信支付单返回。
 type CreateResult struct {
-	PayURL   string
-	QRCode   string
-	PrepayID string
-	Raw      map[string]interface{}
+	PayURL      string
+	QRCode      string
+	PrepayID    string
+	JSAPIParams map[string]string
+	Raw         map[string]interface{}
 }
 
 // QueryResult 查询微信订单返回。
@@ -210,6 +217,15 @@ func CreatePayment(ctx context.Context, cfg *Config, input CreateInput, interact
 		payload["scene_info"] = map[string]interface{}{
 			"payer_client_ip": clientIP,
 		}
+	case constants.PaymentInteractionJSAPI:
+		openID := strings.TrimSpace(input.OpenID)
+		if openID == "" {
+			return nil, fmt.Errorf("%w: openid is required for jsapi", ErrConfigInvalid)
+		}
+		endpoint = "/v3/pay/transactions/jsapi"
+		payload["payer"] = map[string]interface{}{
+			"openid": openID,
+		}
 	default:
 		return nil, fmt.Errorf("%w: interaction_mode %s is not supported", ErrConfigInvalid, interactionMode)
 	}
@@ -237,6 +253,16 @@ func CreatePayment(ctx context.Context, cfg *Config, input CreateInput, interact
 			return nil, fmt.Errorf("%w: missing code_url", ErrResponseInvalid)
 		}
 		result.QRCode = codeURL
+	case constants.PaymentInteractionJSAPI:
+		if result.PrepayID == "" {
+			return nil, fmt.Errorf("%w: missing prepay_id", ErrResponseInvalid)
+		}
+		params, err := buildJSAPIParams(cfg, result.PrepayID)
+		if err != nil {
+			return nil, err
+		}
+		result.JSAPIParams = params
+		raw["jsapi_params"] = params
 	}
 	return result, nil
 }
@@ -358,7 +384,7 @@ func ToPaymentStatus(tradeState string) (string, bool) {
 // IsSupportedInteractionMode 是否支持交互模式。
 func IsSupportedInteractionMode(mode string) bool {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
-	case constants.PaymentInteractionQR, constants.PaymentInteractionRedirect:
+	case constants.PaymentInteractionQR, constants.PaymentInteractionRedirect, constants.PaymentInteractionJSAPI:
 		return true
 	default:
 		return false
@@ -677,6 +703,45 @@ func buildDescription(description string, orderNo string) string {
 		return "微信支付订单"
 	}
 	return "订单 " + orderNo
+}
+
+func buildJSAPIParams(cfg *Config, prepayID string) (map[string]string, error) {
+	privateKey, err := parsePrivateKey(cfg.MerchantPrivateKey)
+	if err != nil {
+		return nil, err
+	}
+	appID := strings.TrimSpace(cfg.AppID)
+	timeStamp := strconv.FormatInt(time.Now().Unix(), 10)
+	nonceStr, err := randomNonceString(16)
+	if err != nil {
+		return nil, fmt.Errorf("%w: generate jsapi nonce failed", ErrConfigInvalid)
+	}
+	packageValue := "prepay_id=" + strings.TrimSpace(prepayID)
+	message := appID + "\n" + timeStamp + "\n" + nonceStr + "\n" + packageValue + "\n"
+	digest := sha256.Sum256([]byte(message))
+	signature, err := rsa.SignPKCS1v15(rand.Reader, privateKey, crypto.SHA256, digest[:])
+	if err != nil {
+		return nil, fmt.Errorf("%w: sign jsapi params failed", ErrConfigInvalid)
+	}
+	return map[string]string{
+		"appId":     appID,
+		"timeStamp": timeStamp,
+		"nonceStr":  nonceStr,
+		"package":   packageValue,
+		"signType":  "RSA",
+		"paySign":   base64.StdEncoding.EncodeToString(signature),
+	}, nil
+}
+
+func randomNonceString(byteLen int) (string, error) {
+	if byteLen <= 0 {
+		byteLen = 16
+	}
+	buf := make([]byte, byteLen)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buf), nil
 }
 
 func validatePrivateKey(raw string) error {

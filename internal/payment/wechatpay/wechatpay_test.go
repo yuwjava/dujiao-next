@@ -2,9 +2,12 @@ package wechatpay
 
 import (
 	"context"
+	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -71,6 +74,23 @@ func TestValidateConfigSupportsQRWithoutH5RedirectURL(t *testing.T) {
 		t.Fatalf("parse config failed: %v", err)
 	}
 	if err := ValidateConfig(cfg, constants.PaymentInteractionQR); err != nil {
+		t.Fatalf("unexpected validate error: %v", err)
+	}
+}
+
+func TestValidateConfigSupportsJSAPIWithoutH5RedirectURL(t *testing.T) {
+	cfg, err := ParseConfig(map[string]interface{}{
+		"appid":                "wx1234567890",
+		"mchid":                "1900000109",
+		"merchant_serial_no":   "ABC123456789",
+		"merchant_private_key": buildTestPrivateKey(),
+		"api_v3_key":           "12345678901234567890123456789012",
+		"notify_url":           "https://example.com/api/v1/payments/callback",
+	})
+	if err != nil {
+		t.Fatalf("parse config failed: %v", err)
+	}
+	if err := ValidateConfig(cfg, constants.PaymentInteractionJSAPI); err != nil {
 		t.Fatalf("unexpected validate error: %v", err)
 	}
 }
@@ -219,6 +239,100 @@ func TestCreatePaymentNativeSuccess(t *testing.T) {
 	}
 	if result.PayURL != "" {
 		t.Fatalf("native payment should not contain pay url")
+	}
+}
+
+func TestCreatePaymentJSAPISuccess(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v3/pay/transactions/jsapi" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		var payload map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode body failed: %v", err)
+		}
+		payer, ok := payload["payer"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("payer payload missing")
+		}
+		if payer["openid"] != "oUpF8uMuAJO_M2pxb1Q9zNjWeS6o" {
+			t.Fatalf("unexpected openid: %v", payer["openid"])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"prepay_id":"wx-jsapi-prepay"}`))
+	}))
+	defer server.Close()
+
+	privateKey := buildTestPrivateKey()
+	cfg, err := ParseConfig(map[string]interface{}{
+		"appid":                "wx1234567890",
+		"mchid":                "1900000109",
+		"merchant_serial_no":   "ABC123456789",
+		"merchant_private_key": privateKey,
+		"api_v3_key":           "12345678901234567890123456789012",
+		"notify_url":           "https://example.com/api/v1/payments/callback",
+		"base_url":             server.URL,
+	})
+	if err != nil {
+		t.Fatalf("parse config failed: %v", err)
+	}
+
+	result, err := CreatePayment(context.Background(), cfg, CreateInput{
+		OrderNo:     "ORDER-1004",
+		Amount:      "3.00",
+		Currency:    "CNY",
+		Description: "jsapi",
+		OpenID:      "oUpF8uMuAJO_M2pxb1Q9zNjWeS6o",
+	}, constants.PaymentInteractionJSAPI)
+	if err != nil {
+		t.Fatalf("create payment failed: %v", err)
+	}
+	if result.PrepayID != "wx-jsapi-prepay" {
+		t.Fatalf("unexpected prepay id: %s", result.PrepayID)
+	}
+	if result.PayURL != "" || result.QRCode != "" {
+		t.Fatalf("jsapi should not return pay url or qrcode")
+	}
+	params := result.JSAPIParams
+	if params["appId"] != "wx1234567890" || params["package"] != "prepay_id=wx-jsapi-prepay" || params["signType"] != "RSA" {
+		t.Fatalf("unexpected jsapi params: %+v", params)
+	}
+	parsedPrivateKey, err := parsePrivateKey(privateKey)
+	if err != nil {
+		t.Fatalf("parse private key failed: %v", err)
+	}
+	message := params["appId"] + "\n" + params["timeStamp"] + "\n" + params["nonceStr"] + "\n" + params["package"] + "\n"
+	digest := sha256.Sum256([]byte(message))
+	signature, err := base64.StdEncoding.DecodeString(params["paySign"])
+	if err != nil {
+		t.Fatalf("decode paySign failed: %v", err)
+	}
+	if err := rsa.VerifyPKCS1v15(&parsedPrivateKey.PublicKey, crypto.SHA256, digest[:], signature); err != nil {
+		t.Fatalf("verify paySign failed: %v", err)
+	}
+	if _, ok := result.Raw["jsapi_params"]; !ok {
+		t.Fatalf("raw response should include jsapi_params")
+	}
+}
+
+func TestCreatePaymentJSAPIRequiresOpenID(t *testing.T) {
+	cfg, err := ParseConfig(map[string]interface{}{
+		"appid":                "wx1234567890",
+		"mchid":                "1900000109",
+		"merchant_serial_no":   "ABC123456789",
+		"merchant_private_key": buildTestPrivateKey(),
+		"api_v3_key":           "12345678901234567890123456789012",
+		"notify_url":           "https://example.com/api/v1/payments/callback",
+	})
+	if err != nil {
+		t.Fatalf("parse config failed: %v", err)
+	}
+	_, err = CreatePayment(context.Background(), cfg, CreateInput{
+		OrderNo: "ORDER-1005",
+		Amount:  "1.00",
+	}, constants.PaymentInteractionJSAPI)
+	if !errors.Is(err, ErrConfigInvalid) {
+		t.Fatalf("expected config invalid error, got: %v", err)
 	}
 }
 

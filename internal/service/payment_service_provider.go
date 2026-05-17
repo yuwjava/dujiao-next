@@ -507,6 +507,7 @@ func (s *PaymentService) applyProviderPayment(input CreatePaymentInput, order *m
 				Description: buildOrderSubject(order),
 				ClientIP:    strings.TrimSpace(input.ClientIP),
 				NotifyURL:   cfg.NotifyURL,
+				OpenID:      strings.TrimSpace(input.OpenID),
 			}, channel.InteractionMode)
 			if err != nil {
 				switch {
@@ -526,6 +527,12 @@ func (s *PaymentService) applyProviderPayment(input CreatePaymentInput, order *m
 			payment.ProviderRef = pickFirstNonEmpty(strings.TrimSpace(payment.ProviderRef), order.OrderNo)
 			if createResult.Raw != nil {
 				payment.ProviderPayload = models.JSON(createResult.Raw)
+			}
+			if len(createResult.JSAPIParams) > 0 {
+				if payment.ProviderPayload == nil {
+					payment.ProviderPayload = models.JSON{}
+				}
+				payment.ProviderPayload["jsapi_params"] = createResult.JSAPIParams
 			}
 			if cfg.NeedsCurrencyConversion() {
 				appendExchangeInfo(payment, payAmount, cfg.ExchangeRate, originalAmount, originalCurrency)

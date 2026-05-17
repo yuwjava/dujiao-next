@@ -778,6 +778,7 @@ type CreateGuestOrderAndPayRequest struct {
 	ManualFormData      map[string]models.JSON       `json:"manual_form_data"`
 	CaptchaPayload      shared.CaptchaPayloadRequest `json:"captcha_payload"`
 	ChannelID           uint                         `json:"channel_id"`
+	OpenID              string                       `json:"openid"`
 }
 
 // CreateGuestOrderAndPay 游客创建订单并发起支付（合并接口）
@@ -846,6 +847,7 @@ func (h *Handler) CreateGuestOrderAndPay(c *gin.Context) {
 		ChannelID:  req.ChannelID,
 		UseBalance: false,
 		ClientIP:   c.ClientIP(),
+		OpenID:     req.OpenID,
 		Context:    c.Request.Context(),
 	})
 	if err != nil {
@@ -872,6 +874,9 @@ func (h *Handler) CreateGuestOrderAndPay(c *gin.Context) {
 		resp["interaction_mode"] = result.Payment.InteractionMode
 		resp["pay_url"] = result.Payment.PayURL
 		resp["qr_code"] = result.Payment.QRCode
+		if params := dto.ExtractJSAPIParams(result.Payment.ProviderPayload); len(params) > 0 {
+			resp["jsapi_params"] = params
+		}
 		resp["expires_at"] = result.Payment.ExpiredAt
 	}
 	response.Success(c, resp)
@@ -1028,6 +1033,7 @@ type CreateGuestPaymentRequest struct {
 	OrderPassword string `json:"order_password" binding:"required"`
 	OrderNo       string `json:"order_no" binding:"required"`
 	ChannelID     uint   `json:"channel_id" binding:"required"`
+	OpenID        string `json:"openid"`
 }
 
 type LatestGuestPaymentQuery struct {
@@ -1067,6 +1073,7 @@ func (h *Handler) CreateGuestPayment(c *gin.Context) {
 		ChannelID:  req.ChannelID,
 		UseBalance: false,
 		ClientIP:   c.ClientIP(),
+		OpenID:     req.OpenID,
 		Context:    c.Request.Context(),
 	})
 	if err != nil {

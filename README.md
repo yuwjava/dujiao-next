@@ -20,6 +20,8 @@ Dujiao-Next API is the backend service for the Dujiao-Next ecosystem. It provide
 ```bash
 go mod tidy
 go run cmd/server/main.go
+go run -tags=fullstack cmd/server/main.go
+
 ```
 
 The default health check endpoint is:

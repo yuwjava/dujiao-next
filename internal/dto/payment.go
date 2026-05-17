@@ -9,18 +9,19 @@ import (
 
 // CreatePaymentResp 创建支付响应
 type CreatePaymentResp struct {
-	OrderPaid        bool         `json:"order_paid"`
-	WalletPaidAmount models.Money `json:"wallet_paid_amount"`
-	OnlinePayAmount  models.Money `json:"online_pay_amount"`
-	PaymentID        *uint        `json:"payment_id,omitempty"`
-	ChannelID        *uint        `json:"channel_id,omitempty"`
-	ProviderType     string       `json:"provider_type,omitempty"`
-	ChannelType      string       `json:"channel_type,omitempty"`
-	InteractionMode  string       `json:"interaction_mode,omitempty"`
-	PayURL           string       `json:"pay_url,omitempty"`
-	QRCode           string       `json:"qr_code,omitempty"`
-	ExpiresAt        *time.Time   `json:"expires_at,omitempty"`
-	ChannelName      string       `json:"channel_name,omitempty"`
+	OrderPaid        bool              `json:"order_paid"`
+	WalletPaidAmount models.Money      `json:"wallet_paid_amount"`
+	OnlinePayAmount  models.Money      `json:"online_pay_amount"`
+	PaymentID        *uint             `json:"payment_id,omitempty"`
+	ChannelID        *uint             `json:"channel_id,omitempty"`
+	ProviderType     string            `json:"provider_type,omitempty"`
+	ChannelType      string            `json:"channel_type,omitempty"`
+	InteractionMode  string            `json:"interaction_mode,omitempty"`
+	PayURL           string            `json:"pay_url,omitempty"`
+	QRCode           string            `json:"qr_code,omitempty"`
+	JSAPIParams      map[string]string `json:"jsapi_params,omitempty"`
+	ExpiresAt        *time.Time        `json:"expires_at,omitempty"`
+	ChannelName      string            `json:"channel_name,omitempty"`
 }
 
 // NewCreatePaymentResp 从 service.CreatePaymentResult 构造响应
@@ -38,6 +39,7 @@ func NewCreatePaymentResp(result *service.CreatePaymentResult) CreatePaymentResp
 		resp.InteractionMode = result.Payment.InteractionMode
 		resp.PayURL = result.Payment.PayURL
 		resp.QRCode = result.Payment.QRCode
+		resp.JSAPIParams = ExtractJSAPIParams(result.Payment.ProviderPayload)
 		resp.ExpiresAt = result.Payment.ExpiredAt
 	}
 	if result.Channel != nil {
@@ -48,16 +50,17 @@ func NewCreatePaymentResp(result *service.CreatePaymentResult) CreatePaymentResp
 
 // LatestPaymentResp 最新待支付记录响应
 type LatestPaymentResp struct {
-	PaymentID       uint       `json:"payment_id"`
-	OrderNo         string     `json:"order_no"`
-	ChannelID       uint       `json:"channel_id"`
-	ChannelName     string     `json:"channel_name,omitempty"`
-	ProviderType    string     `json:"provider_type"`
-	ChannelType     string     `json:"channel_type"`
-	InteractionMode string     `json:"interaction_mode"`
-	PayURL          string     `json:"pay_url"`
-	QRCode          string     `json:"qr_code"`
-	ExpiresAt       *time.Time `json:"expires_at"`
+	PaymentID       uint              `json:"payment_id"`
+	OrderNo         string            `json:"order_no"`
+	ChannelID       uint              `json:"channel_id"`
+	ChannelName     string            `json:"channel_name,omitempty"`
+	ProviderType    string            `json:"provider_type"`
+	ChannelType     string            `json:"channel_type"`
+	InteractionMode string            `json:"interaction_mode"`
+	PayURL          string            `json:"pay_url"`
+	QRCode          string            `json:"qr_code"`
+	JSAPIParams     map[string]string `json:"jsapi_params,omitempty"`
+	ExpiresAt       *time.Time        `json:"expires_at"`
 }
 
 // NewLatestPaymentResp 从 Payment + Order 构造响应
@@ -72,8 +75,35 @@ func NewLatestPaymentResp(payment *models.Payment, orderNo string) LatestPayment
 		InteractionMode: payment.InteractionMode,
 		PayURL:          payment.PayURL,
 		QRCode:          payment.QRCode,
+		JSAPIParams:     ExtractJSAPIParams(payment.ProviderPayload),
 		ExpiresAt:       payment.ExpiredAt,
 	}
 	// 排除：OrderID、Amount、FeeRate、FixedFee、FeeAmount、Currency、Status、
 	// ProviderRef、GatewayOrderNo、ProviderPayload、CreatedAt、UpdatedAt、PaidAt、CallbackAt
+}
+
+func ExtractJSAPIParams(payload models.JSON) map[string]string {
+	raw, ok := payload["jsapi_params"]
+	if !ok {
+		return nil
+	}
+	result := map[string]string{}
+	switch params := raw.(type) {
+	case map[string]string:
+		for key, value := range params {
+			if value != "" {
+				result[key] = value
+			}
+		}
+	case map[string]interface{}:
+		for key, value := range params {
+			if str, ok := value.(string); ok && str != "" {
+				result[key] = str
+			}
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }

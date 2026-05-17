@@ -18,6 +18,7 @@ type CreatePaymentRequest struct {
 	OrderNo    string `json:"order_no" binding:"required"`
 	ChannelID  uint   `json:"channel_id"`
 	UseBalance bool   `json:"use_balance"`
+	OpenID     string `json:"openid"`
 }
 
 // LatestPaymentQuery 查询最新待支付记录
@@ -70,6 +71,7 @@ func (h *Handler) CreatePayment(c *gin.Context) {
 		ChannelID:  req.ChannelID,
 		UseBalance: req.UseBalance,
 		ClientIP:   c.ClientIP(),
+		OpenID:     req.OpenID,
 		Context:    c.Request.Context(),
 	})
 	if err != nil {

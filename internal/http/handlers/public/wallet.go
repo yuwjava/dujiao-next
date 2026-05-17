@@ -23,6 +23,7 @@ type WalletRechargeRequest struct {
 	ChannelID uint   `json:"channel_id" binding:"required"`
 	Currency  string `json:"currency"`
 	Remark    string `json:"remark"`
+	OpenID    string `json:"openid"`
 }
 
 // WalletPaymentChannelsRequest 查询钱包充值可用支付渠道请求
@@ -134,6 +135,7 @@ func (h *Handler) RechargeWallet(c *gin.Context) {
 		Currency:  currency,
 		Remark:    strings.TrimSpace(req.Remark),
 		ClientIP:  c.ClientIP(),
+		OpenID:    strings.TrimSpace(req.OpenID),
 		Context:   c.Request.Context(),
 	})
 	if err != nil {

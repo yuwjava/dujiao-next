@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/dujiao-next/internal/constants"
+	"github.com/dujiao-next/internal/dto"
 	"github.com/dujiao-next/internal/http/response"
 	"github.com/dujiao-next/internal/i18n"
 	"github.com/dujiao-next/internal/logger"
@@ -81,6 +82,7 @@ type createPaymentRequest struct {
 	OrderID        uint   `json:"order_id" binding:"required"`
 	ChannelID      uint   `json:"channel_id"`
 	UseBalance     bool   `json:"use_balance"`
+	OpenID         string `json:"openid"`
 }
 
 type latestPaymentQuery struct {
@@ -410,6 +412,7 @@ func (h *Handler) CreatePayment(c *gin.Context) {
 		ChannelID:  req.ChannelID,
 		UseBalance: req.UseBalance,
 		ClientIP:   c.ClientIP(),
+		OpenID:     req.OpenID,
 		Context:    c.Request.Context(),
 	})
 	if err != nil {
@@ -900,6 +903,9 @@ func buildChannelPaymentResponse(order *models.Order, payment *models.Payment) g
 		"callback_at":      payment.CallbackAt,
 		"created_at":       payment.CreatedAt,
 		"updated_at":       payment.UpdatedAt,
+	}
+	if params := dto.ExtractJSAPIParams(payment.ProviderPayload); len(params) > 0 {
+		resp["jsapi_params"] = params
 	}
 	if order != nil {
 		resp["order_no"] = order.OrderNo

@@ -296,6 +296,7 @@ type CreateOrderAndPayRequest struct {
 	ManualFormData      map[string]models.JSON `json:"manual_form_data"`
 	ChannelID           uint                   `json:"channel_id"`
 	UseBalance          bool                   `json:"use_balance"`
+	OpenID              string                 `json:"openid"`
 }
 
 // CreateOrderAndPay 创建订单并发起支付（合并接口）
@@ -352,6 +353,7 @@ func (h *Handler) CreateOrderAndPay(c *gin.Context) {
 		ChannelID:  req.ChannelID,
 		UseBalance: req.UseBalance,
 		ClientIP:   c.ClientIP(),
+		OpenID:     req.OpenID,
 		Context:    c.Request.Context(),
 	})
 	if err != nil {
@@ -378,6 +380,9 @@ func (h *Handler) CreateOrderAndPay(c *gin.Context) {
 		resp["interaction_mode"] = result.Payment.InteractionMode
 		resp["pay_url"] = result.Payment.PayURL
 		resp["qr_code"] = result.Payment.QRCode
+		if params := dto.ExtractJSAPIParams(result.Payment.ProviderPayload); len(params) > 0 {
+			resp["jsapi_params"] = params
+		}
 		resp["expires_at"] = result.Payment.ExpiredAt
 	}
 	response.Success(c, resp)

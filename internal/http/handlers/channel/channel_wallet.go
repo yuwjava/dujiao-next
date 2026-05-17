@@ -172,6 +172,7 @@ func (h *Handler) CreateWalletRecharge(c *gin.Context) {
 		TelegramUserID string `json:"telegram_user_id"`
 		Amount         string `json:"amount" binding:"required"`
 		ChannelID      uint   `json:"channel_id" binding:"required"`
+		OpenID         string `json:"openid"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		respondChannelBindError(c, err)
@@ -204,6 +205,7 @@ func (h *Handler) CreateWalletRecharge(c *gin.Context) {
 		Amount:    models.NewMoneyFromDecimal(amount),
 		Currency:  currency,
 		ClientIP:  c.ClientIP(),
+		OpenID:    strings.TrimSpace(req.OpenID),
 		Context:   c.Request.Context(),
 	})
 	if err != nil {
@@ -212,17 +214,22 @@ func (h *Handler) CreateWalletRecharge(c *gin.Context) {
 		return
 	}
 
+	paymentResp := gin.H{
+		"id":         result.Payment.ID,
+		"amount":     result.Payment.Amount.StringFixed(2),
+		"fee_amount": result.Payment.FeeAmount.StringFixed(2),
+		"currency":   result.Payment.Currency,
+		"status":     result.Payment.Status,
+		"pay_url":    result.Payment.PayURL,
+		"qr_code":    result.Payment.QRCode,
+		"expires_at": result.Payment.ExpiredAt,
+	}
+	if params := dto.ExtractJSAPIParams(result.Payment.ProviderPayload); len(params) > 0 {
+		paymentResp["jsapi_params"] = params
+	}
+
 	respondChannelSuccess(c, gin.H{
 		"recharge_no": result.Recharge.RechargeNo,
-		"payment": gin.H{
-			"id":         result.Payment.ID,
-			"amount":     result.Payment.Amount.StringFixed(2),
-			"fee_amount": result.Payment.FeeAmount.StringFixed(2),
-			"currency":   result.Payment.Currency,
-			"status":     result.Payment.Status,
-			"pay_url":    result.Payment.PayURL,
-			"qr_code":    result.Payment.QRCode,
-			"expires_at": result.Payment.ExpiredAt,
-		},
+		"payment":     paymentResp,
 	})
 }

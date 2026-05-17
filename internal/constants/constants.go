@@ -80,6 +80,7 @@ const (
 const (
 	PaymentInteractionQR       = "qr"
 	PaymentInteractionRedirect = "redirect"
+	PaymentInteractionJSAPI    = "jsapi"
 	PaymentInteractionWAP      = "wap"
 	PaymentInteractionPage     = "page"
 	PaymentInteractionBalance  = "balance"
