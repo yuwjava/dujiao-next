@@ -62,6 +62,7 @@ const (
 type Config struct {
 	common.ExchangeRateConfig
 	AppID              string `json:"appid"`
+	AppSecret          string `json:"app_secret"`
 	MerchantID         string `json:"mchid"`
 	MerchantSerialNo   string `json:"merchant_serial_no"`
 	MerchantPrivateKey string `json:"merchant_private_key"`
@@ -788,6 +789,7 @@ func normalizePrivateKey(raw string) string {
 
 func (c *Config) Normalize() {
 	c.AppID = strings.TrimSpace(c.AppID)
+	c.AppSecret = strings.TrimSpace(c.AppSecret)
 	c.MerchantID = strings.TrimSpace(c.MerchantID)
 	c.MerchantSerialNo = strings.TrimSpace(c.MerchantSerialNo)
 	c.MerchantPrivateKey = strings.TrimSpace(c.MerchantPrivateKey)

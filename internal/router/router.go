@@ -92,6 +92,8 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 			public.GET("/captcha/image", publicHandler.GetImageCaptcha)
 			public.POST("/affiliate/click", publicHandler.TrackAffiliateClick)
 			public.GET("/member-levels", publicHandler.GetPublicMemberLevels)
+			public.GET("/payment/wechat/oauth2/authorize", publicHandler.WechatOAuthAuthorize)
+			public.GET("/payment/wechat/oauth2/callback", publicHandler.WechatOAuthCallback)
 		}
 
 		// 游客接口
