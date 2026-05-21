@@ -265,7 +265,7 @@ func (s *PaymentService) HandleWechatWebhook(input WebhookCallbackInput) (*model
 					"provider_ref", result.TransactionID,
 					"order_no", result.OrderNo,
 				)
-				return nil, result.EventType, nil
+				continue
 			}
 			log.Warnw("payment_webhook_payment_lookup_failed",
 				"channel_id", channel.ID,
@@ -274,7 +274,7 @@ func (s *PaymentService) HandleWechatWebhook(input WebhookCallbackInput) (*model
 				"order_no", result.OrderNo,
 				"error", err,
 			)
-			return nil, result.EventType, err
+			continue
 		}
 		if payment == nil {
 			log.Infow("payment_webhook_payment_not_found",
@@ -283,7 +283,7 @@ func (s *PaymentService) HandleWechatWebhook(input WebhookCallbackInput) (*model
 				"provider_ref", result.TransactionID,
 				"order_no", result.OrderNo,
 			)
-			return nil, result.EventType, nil
+			continue
 		}
 
 		updated, err := s.handleWechatWebhookCallback(channel.ID, payment, result)
@@ -378,7 +378,7 @@ func (s *PaymentService) HandleStripeWebhook(input WebhookCallbackInput) (*model
 					"provider_ref", result.ProviderRef,
 					"order_no", result.OrderNo,
 				)
-				return nil, result.EventType, nil
+				continue
 			}
 			log.Warnw("payment_webhook_payment_lookup_failed",
 				"channel_id", channel.ID,
@@ -388,7 +388,7 @@ func (s *PaymentService) HandleStripeWebhook(input WebhookCallbackInput) (*model
 				"order_no", result.OrderNo,
 				"error", err,
 			)
-			return nil, result.EventType, err
+			continue
 		}
 		if payment == nil {
 			log.Infow("payment_webhook_payment_not_found",
@@ -398,7 +398,7 @@ func (s *PaymentService) HandleStripeWebhook(input WebhookCallbackInput) (*model
 				"provider_ref", result.ProviderRef,
 				"order_no", result.OrderNo,
 			)
-			return nil, result.EventType, nil
+			continue
 		}
 
 		updated, err := s.handleStripeWebhookCallback(channel.ID, payment, result)
