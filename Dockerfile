@@ -9,6 +9,7 @@ RUN echo "Building for $TARGETOS/$TARGETARCH$TARGETVARIANT"
 WORKDIR /src
 
 ENV CGO_ENABLED=0
+ENV GOPROXY=https://goproxy.cn,direct
 
 COPY go.mod go.sum ./
 RUN go mod download
