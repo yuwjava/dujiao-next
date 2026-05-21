@@ -1,4 +1,4 @@
-FROM golang:1.25.3-alpine AS builder
+FROM docker.m.daocloud.io/library/golang:1.25.3-alpine AS builder
 
 ARG TARGETOS
 ARG TARGETARCH
@@ -20,7 +20,7 @@ RUN set -eux; \
     if [ "$TARGETARCH" = "amd64" ] && [ -n "$TARGETVARIANT" ]; then export GOAMD64="${TARGETVARIANT#v}"; fi; \
     go build -trimpath -tags release -ldflags="-s -w -X github.com/dujiao-next/internal/version.Version=${APP_VERSION}" -o /out/dujiao-api ./cmd/server
 
-FROM alpine:latest
+FROM docker.m.daocloud.io/library/alpine:latest
 
 WORKDIR /app
 
