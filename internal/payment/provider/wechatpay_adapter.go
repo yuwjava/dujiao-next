@@ -126,6 +126,9 @@ func (a *wechatpayAdapter) CreatePayment(ctx context.Context, raw models.JSON, i
 		"prepay_id": result.PrepayID,
 		"raw":       result.Raw,
 	}
+	if len(result.JSAPIParams) > 0 {
+		payload["jsapi_params"] = result.JSAPIParams
+	}
 	if converted {
 		payload["exchange_rate"] = strings.TrimSpace(cfg.ExchangeRate)
 		payload["original_amount"] = originalAmount

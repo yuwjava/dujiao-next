@@ -126,40 +126,94 @@ func (r *GormPaymentRepository) ListByOrderID(orderID uint) ([]models.Payment, e
 
 // GetLatestPendingByOrder 获取订单最新待支付记录
 func (r *GormPaymentRepository) GetLatestPendingByOrder(orderID uint, now time.Time) (*models.Payment, error) {
-	var payment models.Payment
+	var payments []models.Payment
 	result := r.db.
 		Select("payments.*, payment_channels.name AS channel_name").
 		Joins("LEFT JOIN payment_channels ON payment_channels.id = payments.channel_id AND payment_channels.deleted_at IS NULL").
-		Where("payments.order_id = ? AND payments.status IN ? AND (payments.expired_at IS NULL OR payments.expired_at > ?) AND ((payments.pay_url IS NOT NULL AND payments.pay_url <> '') OR (payments.qr_code IS NOT NULL AND payments.qr_code <> ''))",
+		Where("payments.order_id = ? AND payments.status IN ? AND (payments.expired_at IS NULL OR payments.expired_at > ?)",
 			orderID,
 			[]string{constants.PaymentStatusInitiated, constants.PaymentStatusPending},
 			now,
-		).Order("payments.id desc").Limit(1).Find(&payment)
+		).Order("payments.id desc").Find(&payments)
 	if result.Error != nil {
 		return nil, result.Error
 	}
-	if result.RowsAffected == 0 {
-		return nil, nil
+	for i := range payments {
+		if paymentHasProviderResult(&payments[i]) {
+			return &payments[i], nil
+		}
 	}
-	return &payment, nil
+	return nil, nil
 }
 
 // GetLatestPendingByOrderChannel 获取订单+渠道最新待支付记录
 func (r *GormPaymentRepository) GetLatestPendingByOrderChannel(orderID uint, channelID uint, now time.Time) (*models.Payment, error) {
-	var payment models.Payment
-	result := r.db.Where("order_id = ? AND channel_id = ? AND status IN ? AND (expired_at IS NULL OR expired_at > ?) AND ((pay_url IS NOT NULL AND pay_url <> '') OR (qr_code IS NOT NULL AND qr_code <> ''))",
+	var payments []models.Payment
+	result := r.db.Where("order_id = ? AND channel_id = ? AND status IN ? AND (expired_at IS NULL OR expired_at > ?)",
 		orderID,
 		channelID,
 		[]string{constants.PaymentStatusInitiated, constants.PaymentStatusPending},
 		now,
-	).Order("id desc").Limit(1).Find(&payment)
+	).Order("id desc").Find(&payments)
 	if result.Error != nil {
 		return nil, result.Error
 	}
-	if result.RowsAffected == 0 {
-		return nil, nil
+	for i := range payments {
+		if paymentHasProviderResult(&payments[i]) {
+			return &payments[i], nil
+		}
 	}
-	return &payment, nil
+	return nil, nil
+}
+
+func paymentHasProviderResult(payment *models.Payment) bool {
+	if payment == nil {
+		return false
+	}
+	if strings.TrimSpace(payment.PayURL) != "" || strings.TrimSpace(payment.QRCode) != "" {
+		return true
+	}
+	return len(extractPaymentJSAPIParams(payment.ProviderPayload)) > 0
+}
+
+func extractPaymentJSAPIParams(payload models.JSON) map[string]string {
+	if len(payload) == 0 {
+		return nil
+	}
+	if result := extractPaymentJSAPIParamsValue(payload["jsapi_params"]); len(result) > 0 {
+		return result
+	}
+	if rawPayload, ok := payload["raw"]; ok {
+		if rawMap, ok := rawPayload.(map[string]interface{}); ok {
+			return extractPaymentJSAPIParamsValue(rawMap["jsapi_params"])
+		}
+		if rawMap, ok := rawPayload.(models.JSON); ok {
+			return extractPaymentJSAPIParamsValue(rawMap["jsapi_params"])
+		}
+	}
+	return nil
+}
+
+func extractPaymentJSAPIParamsValue(raw interface{}) map[string]string {
+	result := map[string]string{}
+	switch params := raw.(type) {
+	case map[string]string:
+		for key, value := range params {
+			if strings.TrimSpace(value) != "" {
+				result[key] = strings.TrimSpace(value)
+			}
+		}
+	case map[string]interface{}:
+		for key, value := range params {
+			if str, ok := value.(string); ok && strings.TrimSpace(str) != "" {
+				result[key] = strings.TrimSpace(str)
+			}
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
 
 // ExpirePendingByOrderIDs 将指定订单的未完成支付记录标记为过期。

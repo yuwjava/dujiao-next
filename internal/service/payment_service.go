@@ -150,22 +150,36 @@ func hasProviderResult(payment *models.Payment) bool {
 }
 
 func extractPaymentJSAPIParams(payload models.JSON) map[string]string {
-	raw, ok := payload["jsapi_params"]
-	if !ok {
+	if len(payload) == 0 {
 		return nil
 	}
+	if result := extractPaymentJSAPIParamsValue(payload["jsapi_params"]); len(result) > 0 {
+		return result
+	}
+	if rawPayload, ok := payload["raw"]; ok {
+		if rawMap, ok := rawPayload.(map[string]interface{}); ok {
+			return extractPaymentJSAPIParamsValue(rawMap["jsapi_params"])
+		}
+		if rawMap, ok := rawPayload.(models.JSON); ok {
+			return extractPaymentJSAPIParamsValue(rawMap["jsapi_params"])
+		}
+	}
+	return nil
+}
+
+func extractPaymentJSAPIParamsValue(raw interface{}) map[string]string {
 	result := map[string]string{}
 	switch params := raw.(type) {
 	case map[string]string:
 		for key, value := range params {
 			if strings.TrimSpace(value) != "" {
-				result[key] = value
+				result[key] = strings.TrimSpace(value)
 			}
 		}
 	case map[string]interface{}:
 		for key, value := range params {
 			if str, ok := value.(string); ok && strings.TrimSpace(str) != "" {
-				result[key] = str
+				result[key] = strings.TrimSpace(str)
 			}
 		}
 	}

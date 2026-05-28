@@ -23,6 +23,7 @@ func setupPaymentRepositoryTest(t *testing.T) (*GormPaymentRepository, *gorm.DB)
 	if err := db.AutoMigrate(
 		&models.User{},
 		&models.Order{},
+		&models.PaymentChannel{},
 		&models.Payment{},
 		&models.WalletRechargeOrder{},
 	); err != nil {
@@ -281,5 +282,102 @@ func TestPaymentRepositoryListAdminLightweightSkipCount(t *testing.T) {
 	}
 	if len(rows[0].ProviderPayload) != 0 {
 		t.Fatalf("provider payload should be empty in lightweight query, got %+v", rows[0].ProviderPayload)
+	}
+}
+
+func TestPaymentRepositoryGetLatestPendingIncludesJSAPIParams(t *testing.T) {
+	repo, db := setupPaymentRepositoryTest(t)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	order := models.Order{
+		OrderNo:                 "DJJSAPIREPO001",
+		Status:                  constants.OrderStatusPendingPayment,
+		Currency:                "CNY",
+		OriginalAmount:          models.NewMoneyFromDecimal(decimal.NewFromInt(10)),
+		DiscountAmount:          models.NewMoneyFromDecimal(decimal.Zero),
+		PromotionDiscountAmount: models.NewMoneyFromDecimal(decimal.Zero),
+		TotalAmount:             models.NewMoneyFromDecimal(decimal.NewFromInt(10)),
+		WalletPaidAmount:        models.NewMoneyFromDecimal(decimal.Zero),
+		OnlinePaidAmount:        models.NewMoneyFromDecimal(decimal.NewFromInt(10)),
+		RefundedAmount:          models.NewMoneyFromDecimal(decimal.Zero),
+		CreatedAt:               now,
+		UpdatedAt:               now,
+	}
+	if err := db.Create(&order).Error; err != nil {
+		t.Fatalf("create order failed: %v", err)
+	}
+
+	channel := models.PaymentChannel{
+		Name:            "Wechat JSAPI",
+		ProviderType:    constants.PaymentProviderOfficial,
+		ChannelType:     constants.PaymentChannelTypeWechat,
+		InteractionMode: constants.PaymentInteractionJSAPI,
+		IsActive:        true,
+		FeeRate:         models.NewMoneyFromDecimal(decimal.Zero),
+		FixedFee:        models.NewMoneyFromDecimal(decimal.Zero),
+		MinAmount:       models.NewMoneyFromDecimal(decimal.Zero),
+		MaxAmount:       models.NewMoneyFromDecimal(decimal.Zero),
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}
+	if err := db.Create(&channel).Error; err != nil {
+		t.Fatalf("create channel failed: %v", err)
+	}
+
+	jsapiPayment := models.Payment{
+		OrderID:         order.ID,
+		ChannelID:       channel.ID,
+		ProviderType:    constants.PaymentProviderOfficial,
+		ChannelType:     constants.PaymentChannelTypeWechat,
+		InteractionMode: constants.PaymentInteractionJSAPI,
+		Amount:          models.NewMoneyFromDecimal(decimal.NewFromInt(10)),
+		FeeRate:         models.NewMoneyFromDecimal(decimal.Zero),
+		FeeAmount:       models.NewMoneyFromDecimal(decimal.Zero),
+		Currency:        "CNY",
+		Status:          constants.PaymentStatusPending,
+		ProviderPayload: models.JSON{
+			"raw": map[string]interface{}{
+				"jsapi_params": map[string]interface{}{"package": "prepay_id=legacy-jsapi"},
+			},
+		},
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := db.Create(&jsapiPayment).Error; err != nil {
+		t.Fatalf("create jsapi payment failed: %v", err)
+	}
+
+	emptyPayment := models.Payment{
+		OrderID:         order.ID,
+		ChannelID:       channel.ID,
+		ProviderType:    constants.PaymentProviderOfficial,
+		ChannelType:     constants.PaymentChannelTypeWechat,
+		InteractionMode: constants.PaymentInteractionJSAPI,
+		Amount:          models.NewMoneyFromDecimal(decimal.NewFromInt(10)),
+		FeeRate:         models.NewMoneyFromDecimal(decimal.Zero),
+		FeeAmount:       models.NewMoneyFromDecimal(decimal.Zero),
+		Currency:        "CNY",
+		Status:          constants.PaymentStatusPending,
+		CreatedAt:       now.Add(time.Second),
+		UpdatedAt:       now.Add(time.Second),
+	}
+	if err := db.Create(&emptyPayment).Error; err != nil {
+		t.Fatalf("create empty payment failed: %v", err)
+	}
+
+	latest, err := repo.GetLatestPendingByOrder(order.ID, now)
+	if err != nil {
+		t.Fatalf("GetLatestPendingByOrder failed: %v", err)
+	}
+	if latest == nil || latest.ID != jsapiPayment.ID {
+		t.Fatalf("expected jsapi payment %d, got %+v", jsapiPayment.ID, latest)
+	}
+
+	latestByChannel, err := repo.GetLatestPendingByOrderChannel(order.ID, channel.ID, now)
+	if err != nil {
+		t.Fatalf("GetLatestPendingByOrderChannel failed: %v", err)
+	}
+	if latestByChannel == nil || latestByChannel.ID != jsapiPayment.ID {
+		t.Fatalf("expected jsapi payment by channel %d, got %+v", jsapiPayment.ID, latestByChannel)
 	}
 }

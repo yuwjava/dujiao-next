@@ -195,6 +195,42 @@ func TestWechatpayAdapter_CreatePayment_ExchangeRate_AuditFields(t *testing.T) {
 	}
 }
 
+func TestWechatpayAdapter_CreatePayment_JSAPIParamsTopLevel(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v3/pay/transactions/jsapi" {
+			t.Fatalf("unexpected path: %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"prepay_id":"wx-jsapi-adapter-001"}`))
+	}))
+	defer server.Close()
+
+	raw := buildMinimalWechatRaw(t)
+	raw["base_url"] = server.URL
+
+	a := NewWechatpayAdapter()
+	result, err := a.CreatePayment(context.Background(), raw, CreateInput{
+		OrderNo:   "ORDER-WX-JSAPI-001",
+		Subject:   "jsapi adapter test",
+		Currency:  "CNY",
+		Amount:    models.NewMoneyFromDecimal(decimal.NewFromInt(10)),
+		ClientIP:  "127.0.0.1",
+		Extra:     models.JSON{"interaction_mode": constants.PaymentInteractionJSAPI, "openid": "oUpF8uMuAJO_M2pxb1Q9zNjWeS6o"},
+		NotifyURL: "https://example.com/api/v1/payments/webhook/wechat",
+	})
+	if err != nil {
+		t.Fatalf("CreatePayment() failed: %v", err)
+	}
+
+	params, ok := result.Payload["jsapi_params"].(map[string]string)
+	if !ok {
+		t.Fatalf("Payload[jsapi_params] should be top-level map[string]string, got %#v", result.Payload["jsapi_params"])
+	}
+	if params["package"] != "prepay_id=wx-jsapi-adapter-001" {
+		t.Fatalf("unexpected package: %s", params["package"])
+	}
+}
+
 func TestWechatpayAdapter_MapWechatpayError(t *testing.T) {
 	cases := []struct {
 		name string

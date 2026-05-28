@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"strings"
 	"time"
 
 	"github.com/dujiao-next/internal/models"
@@ -95,22 +96,36 @@ func NewLatestPaymentResp(payment *models.Payment, orderNo string) LatestPayment
 }
 
 func ExtractJSAPIParams(payload models.JSON) map[string]string {
-	raw, ok := payload["jsapi_params"]
-	if !ok {
+	if len(payload) == 0 {
 		return nil
 	}
+	if result := extractJSAPIParamsValue(payload["jsapi_params"]); len(result) > 0 {
+		return result
+	}
+	if rawPayload, ok := payload["raw"]; ok {
+		if rawMap, ok := rawPayload.(map[string]interface{}); ok {
+			return extractJSAPIParamsValue(rawMap["jsapi_params"])
+		}
+		if rawMap, ok := rawPayload.(models.JSON); ok {
+			return extractJSAPIParamsValue(rawMap["jsapi_params"])
+		}
+	}
+	return nil
+}
+
+func extractJSAPIParamsValue(raw interface{}) map[string]string {
 	result := map[string]string{}
 	switch params := raw.(type) {
 	case map[string]string:
 		for key, value := range params {
-			if value != "" {
-				result[key] = value
+			if strings.TrimSpace(value) != "" {
+				result[key] = strings.TrimSpace(value)
 			}
 		}
 	case map[string]interface{}:
 		for key, value := range params {
-			if str, ok := value.(string); ok && str != "" {
-				result[key] = str
+			if str, ok := value.(string); ok && strings.TrimSpace(str) != "" {
+				result[key] = strings.TrimSpace(str)
 			}
 		}
 	}
