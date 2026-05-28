@@ -113,6 +113,7 @@ type CouponUsageListFilter struct {
 type UserListFilter struct {
 	Page          int
 	PageSize      int
+	UserID        uint
 	Keyword       string
 	Status        string
 	CreatedFrom   *time.Time

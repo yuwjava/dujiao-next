@@ -434,11 +434,17 @@ const (
 
 	SettingKeyOrderRiskControlConfig = "order_risk_control_config"
 
+	SettingKeyUpstreamSyncConfig        = "upstream_sync_config"
+	SettingFieldUpstreamSyncIntervalMin = "interval_minutes"
+	SettingFieldUpstreamPreOrderCheck   = "pre_order_stock_check_enabled"
+
 	SettingKeyCallbackRoutesConfig = "callback_routes_config"
-	SettingFieldPaymentCallback    = "payment_callback"
-	SettingFieldPaypalWebhook      = "paypal_webhook"
-	SettingFieldStripeWebhook      = "stripe_webhook"
-	SettingFieldUpstreamCallback   = "upstream_callback"
+
+	SettingKeyHomeAnnouncement   = "home_announcement"
+	SettingFieldPaymentCallback  = "payment_callback"
+	SettingFieldPaypalWebhook    = "paypal_webhook"
+	SettingFieldStripeWebhook    = "stripe_webhook"
+	SettingFieldUpstreamCallback = "upstream_callback"
 
 	// 默认回调路由路径
 	DefaultPaymentCallbackPath  = "/api/v1/payments/callback"

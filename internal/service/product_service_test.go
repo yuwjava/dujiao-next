@@ -380,6 +380,36 @@ func TestProductServiceCreateRejectsParentCategoryWithChildren(t *testing.T) {
 	}
 }
 
+func TestProductServiceQuickUpdateRejectsActivationWithoutCategory(t *testing.T) {
+	svc, db := newProductServiceForTest(t)
+
+	product := models.Product{
+		CategoryID:      0,
+		Slug:            "uncategorized-imported-product",
+		TitleJSON:       models.JSON{"zh-CN": "uncategorized-imported-product"},
+		PriceAmount:     models.NewMoneyFromDecimal(decimal.NewFromInt(10)),
+		FulfillmentType: constants.FulfillmentTypeUpstream,
+		IsMapped:        true,
+		IsActive:        false,
+	}
+	if err := db.Create(&product).Error; err != nil {
+		t.Fatalf("create uncategorized product failed: %v", err)
+	}
+
+	_, err := svc.QuickUpdate(strconv.FormatUint(uint64(product.ID), 10), map[string]interface{}{"is_active": true})
+	if err != ErrProductCategoryInvalid {
+		t.Fatalf("expected ErrProductCategoryInvalid, got %v", err)
+	}
+
+	var got models.Product
+	if err := db.First(&got, product.ID).Error; err != nil {
+		t.Fatalf("reload product failed: %v", err)
+	}
+	if got.IsActive {
+		t.Fatalf("expected product to remain inactive")
+	}
+}
+
 func TestProductServiceListPublicSortOrderDescending(t *testing.T) {
 	svc, db := newProductServiceForTest(t)
 

@@ -106,6 +106,7 @@ func newTestProcurementService(
 	svc := NewProcurementOrderService(
 		repository.NewProcurementOrderRepository(db),
 		repository.NewOrderRepository(db),
+		repository.NewFulfillmentRepository(db),
 		repository.NewProductMappingRepository(db),
 		repository.NewSKUMappingRepository(db),
 		connSvc,

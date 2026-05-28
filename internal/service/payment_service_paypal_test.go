@@ -5,7 +5,6 @@ import (
 
 	"github.com/dujiao-next/internal/constants"
 	"github.com/dujiao-next/internal/models"
-	"github.com/dujiao-next/internal/payment/paypal"
 )
 
 func TestMapPaypalStatus(t *testing.T) {
@@ -69,72 +68,55 @@ func TestShouldMarkFulfilling(t *testing.T) {
 	}
 }
 
-func TestBuildPaypalCallbackAmountSuccess(t *testing.T) {
-	event := &paypal.WebhookEvent{
-		Resource: map[string]interface{}{
-			"amount": map[string]interface{}{
-				"value":         "12.34",
-				"currency_code": "usd",
-			},
-		},
+func TestIsOrderFullyAutoFulfill(t *testing.T) {
+	if isOrderFullyAutoFulfill(nil) {
+		t.Fatalf("nil order should not be fully auto")
 	}
 
-	amount, currency, err := buildPaypalCallbackAmount(event, constants.PaymentStatusSuccess)
-	if err != nil {
-		t.Fatalf("buildPaypalCallbackAmount should succeed, got: %v", err)
-	}
-	if amount.String() != "12.34" {
-		t.Fatalf("unexpected amount: %s", amount.String())
-	}
-	if currency != "USD" {
-		t.Fatalf("unexpected currency: %s", currency)
-	}
-}
-
-func TestBuildPaypalCallbackAmountSuccessMissingAmount(t *testing.T) {
-	event := &paypal.WebhookEvent{
-		Resource: map[string]interface{}{
-			"status": "COMPLETED",
-		},
+	autoSingle := &models.Order{Items: []models.OrderItem{{FulfillmentType: constants.FulfillmentTypeAuto}}}
+	if !isOrderFullyAutoFulfill(autoSingle) {
+		t.Fatalf("single auto order should be fully auto")
 	}
 
-	_, _, err := buildPaypalCallbackAmount(event, constants.PaymentStatusSuccess)
-	if err == nil {
-		t.Fatalf("buildPaypalCallbackAmount should fail when success callback misses amount")
-	}
-}
-
-func TestBuildPaypalCallbackAmountSuccessInvalidAmount(t *testing.T) {
-	event := &paypal.WebhookEvent{
-		Resource: map[string]interface{}{
-			"amount": map[string]interface{}{
-				"value":         "invalid",
-				"currency_code": "USD",
-			},
-		},
+	manualSingle := &models.Order{Items: []models.OrderItem{{FulfillmentType: constants.FulfillmentTypeManual}}}
+	if isOrderFullyAutoFulfill(manualSingle) {
+		t.Fatalf("single manual order should not be fully auto")
 	}
 
-	_, _, err := buildPaypalCallbackAmount(event, constants.PaymentStatusSuccess)
-	if err == nil {
-		t.Fatalf("buildPaypalCallbackAmount should fail when amount is invalid")
-	}
-}
-
-func TestBuildPaypalCallbackAmountPendingAllowEmpty(t *testing.T) {
-	event := &paypal.WebhookEvent{
-		Resource: map[string]interface{}{
-			"status": "PENDING",
-		},
+	mixedSingle := &models.Order{Items: []models.OrderItem{
+		{FulfillmentType: constants.FulfillmentTypeAuto},
+		{FulfillmentType: constants.FulfillmentTypeManual},
+	}}
+	if isOrderFullyAutoFulfill(mixedSingle) {
+		t.Fatalf("mixed single order should not be fully auto")
 	}
 
-	amount, currency, err := buildPaypalCallbackAmount(event, constants.PaymentStatusPending)
-	if err != nil {
-		t.Fatalf("buildPaypalCallbackAmount should allow empty amount for pending status, got: %v", err)
+	parentAllAuto := &models.Order{Children: []models.Order{
+		{Items: []models.OrderItem{{FulfillmentType: constants.FulfillmentTypeAuto}}},
+		{Items: []models.OrderItem{{FulfillmentType: constants.FulfillmentTypeAuto}}},
+	}}
+	if !isOrderFullyAutoFulfill(parentAllAuto) {
+		t.Fatalf("parent with all auto children should be fully auto")
 	}
-	if !amount.Decimal.IsZero() {
-		t.Fatalf("expected zero amount for pending status, got: %s", amount.String())
+
+	parentMixed := &models.Order{Children: []models.Order{
+		{Items: []models.OrderItem{{FulfillmentType: constants.FulfillmentTypeAuto}}},
+		{Items: []models.OrderItem{{FulfillmentType: constants.FulfillmentTypeManual}}},
+	}}
+	if isOrderFullyAutoFulfill(parentMixed) {
+		t.Fatalf("parent with mixed children should not be fully auto")
 	}
-	if currency != "" {
-		t.Fatalf("expected empty currency for pending status, got: %s", currency)
+
+	parentAllManual := &models.Order{Children: []models.Order{
+		{Items: []models.OrderItem{{FulfillmentType: constants.FulfillmentTypeUpstream}}},
+		{Items: []models.OrderItem{{FulfillmentType: constants.FulfillmentTypeManual}}},
+	}}
+	if isOrderFullyAutoFulfill(parentAllManual) {
+		t.Fatalf("parent with all manual/upstream children should not be fully auto")
+	}
+
+	emptyOrder := &models.Order{}
+	if isOrderFullyAutoFulfill(emptyOrder) {
+		t.Fatalf("order without items or children should not be fully auto")
 	}
 }

@@ -5,16 +5,11 @@ import (
 	"encoding/json"
 	"io"
 	"strings"
-	"time"
 
 	"github.com/dujiao-next/internal/constants"
 	"github.com/dujiao-next/internal/http/handlers/shared"
-	"github.com/dujiao-next/internal/models"
-	"github.com/dujiao-next/internal/payment/bepusdt"
-	"github.com/dujiao-next/internal/service"
 
 	"github.com/gin-gonic/gin"
-	"github.com/shopspring/decimal"
 )
 
 // HandleBepusdtCallback 处理 BEpusdt 回调
@@ -29,32 +24,32 @@ func (h *Handler) HandleBepusdtCallback(c *gin.Context) bool {
 	// 恢复请求体供后续使用
 	c.Request.Body = io.NopCloser(bytes.NewBuffer(body))
 
-	// 尝试解析为 BEpusdt 回调格式
-	data, err := bepusdt.ParseCallback(body)
-	if err != nil {
+	// 轻量级特征检测：trade_id + order_id 必须同时存在（BEpusdt 回调特征，无 pid）
+	var probe struct {
+		TradeID string `json:"trade_id"`
+		OrderID string `json:"order_id"`
+	}
+	if err := json.Unmarshal(body, &probe); err != nil {
 		log.Debugw("bepusdt_callback_parse_failed", "error", err)
 		return false
 	}
-
-	// 检查是否有 trade_id 和 order_id（BEpusdt 回调特征）
-	if data.TradeID == "" || data.OrderID == "" {
-		log.Debugw("bepusdt_callback_missing_fields", "trade_id", data.TradeID, "order_id", data.OrderID)
+	if probe.TradeID == "" || probe.OrderID == "" {
+		log.Debugw("bepusdt_callback_missing_fields", "trade_id", probe.TradeID, "order_id", probe.OrderID)
 		return false
 	}
 
 	log.Infow("bepusdt_callback_received",
-		"trade_id", data.TradeID,
-		"order_id", data.OrderID,
-		"status", data.Status,
+		"trade_id", probe.TradeID,
+		"order_id", probe.OrderID,
 		"raw_body", callbackRawBodyForLog(body),
 	)
 
 	// 通过 order_id（我方网关订单号）查找支付记录，降级到 trade_id（第三方流水号）
-	payment, err := h.PaymentRepo.GetByGatewayOrderNo(data.OrderID)
+	payment, err := h.PaymentRepo.GetByGatewayOrderNo(probe.OrderID)
 	if err != nil || payment == nil {
-		payment, err = h.PaymentRepo.GetLatestByProviderRef(data.TradeID)
+		payment, err = h.PaymentRepo.GetLatestByProviderRef(probe.TradeID)
 		if err != nil || payment == nil {
-			log.Warnw("bepusdt_callback_payment_not_found", "order_id", data.OrderID, "trade_id", data.TradeID, "error", err)
+			log.Warnw("bepusdt_callback_payment_not_found", "order_id", probe.OrderID, "trade_id", probe.TradeID, "error", err)
 			c.String(200, constants.BepusdtCallbackFail)
 			return true
 		}
@@ -77,59 +72,14 @@ func (h *Handler) HandleBepusdtCallback(c *gin.Context) bool {
 		return true
 	}
 
-	// 解析配置
-	cfg, err := bepusdt.ParseConfig(channel.ConfigJSON)
+	updated, err := h.PaymentService.HandleSyncCallback(channel, nil, body)
 	if err != nil {
-		log.Warnw("bepusdt_callback_config_parse_failed", "error", err)
+		log.Errorw("bepusdt_callback_handle_failed", "payment_id", payment.ID, "error", err)
 		c.String(200, constants.BepusdtCallbackFail)
 		return true
 	}
 
-	// 验证签名
-	if err := bepusdt.VerifyCallback(cfg, data); err != nil {
-		log.Warnw("bepusdt_callback_signature_invalid", "error", err)
-		c.String(200, constants.BepusdtCallbackFail)
-		return true
-	}
-
-	log.Debugw("bepusdt_callback_signature_verified")
-
-	// 转换状态
-	status := bepusdt.ToPaymentStatus(data.Status)
-
-	// 构建回调输入
-	amount := models.Money{}
-	amountFloat := data.GetAmount()
-	if amountFloat > 0 {
-		amount = models.NewMoneyFromDecimal(decimal.NewFromFloat(amountFloat))
-	}
-
-	now := time.Now()
-
-	// 将回调数据结构体序列化为 JSON 保存
-	payloadBytes, _ := json.Marshal(data)
-	var payload models.JSON
-	_ = json.Unmarshal(payloadBytes, &payload)
-
-	input := service.PaymentCallbackInput{
-		PaymentID:   payment.ID,
-		OrderNo:     data.OrderID,
-		ChannelID:   channel.ID,
-		Status:      status,
-		ProviderRef: data.TradeID,
-		Amount:      amount,
-		PaidAt:      &now,
-		Payload:     models.JSON(payload),
-	}
-
-	// 处理回调
-	if _, err := h.PaymentService.HandleCallback(input); err != nil {
-		log.Errorw("bepusdt_callback_handle_failed", "error", err)
-		c.String(200, constants.BepusdtCallbackFail)
-		return true
-	}
-
-	log.Infow("bepusdt_callback_processed", "payment_id", payment.ID, "status", status)
+	log.Infow("bepusdt_callback_processed", "payment_id", payment.ID, "status", updated.Status)
 	c.String(200, constants.BepusdtCallbackSuccess)
 	return true
 }

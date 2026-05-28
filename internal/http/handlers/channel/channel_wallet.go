@@ -214,22 +214,28 @@ func (h *Handler) CreateWalletRecharge(c *gin.Context) {
 		return
 	}
 
-	paymentResp := gin.H{
-		"id":         result.Payment.ID,
-		"amount":     result.Payment.Amount.StringFixed(2),
-		"fee_amount": result.Payment.FeeAmount.StringFixed(2),
-		"currency":   result.Payment.Currency,
-		"status":     result.Payment.Status,
-		"pay_url":    result.Payment.PayURL,
-		"qr_code":    result.Payment.QRCode,
-		"expires_at": result.Payment.ExpiredAt,
+	paymentBlock := gin.H{
+		"id":               result.Payment.ID,
+		"amount":           result.Payment.Amount.StringFixed(2),
+		"fee_amount":       result.Payment.FeeAmount.StringFixed(2),
+		"currency":         result.Payment.Currency,
+		"status":           result.Payment.Status,
+		"interaction_mode": result.Payment.InteractionMode,
+		"pay_url":          result.Payment.PayURL,
+		"qr_code":          result.Payment.QRCode,
+		"expires_at":       result.Payment.ExpiredAt,
 	}
-	if params := dto.ExtractJSAPIParams(result.Payment.ProviderPayload); len(params) > 0 {
-		paymentResp["jsapi_params"] = params
+	if addr, chainAmount := dto.ExtractUSDTWalletInfo(result.Payment.ProviderType, result.Payment.InteractionMode, result.Payment.ProviderPayload); addr != "" || chainAmount != "" {
+		if addr != "" {
+			paymentBlock["wallet_address"] = addr
+		}
+		if chainAmount != "" {
+			paymentBlock["chain_amount"] = chainAmount
+		}
 	}
 
 	respondChannelSuccess(c, gin.H{
 		"recharge_no": result.Recharge.RechargeNo,
-		"payment":     paymentResp,
+		"payment":     paymentBlock,
 	})
 }

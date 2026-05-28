@@ -4,8 +4,10 @@ import (
 	"github.com/dujiao-next/internal/authz"
 	"github.com/dujiao-next/internal/cache"
 	"github.com/dujiao-next/internal/config"
+	"github.com/dujiao-next/internal/constants"
 	"github.com/dujiao-next/internal/logger"
 	"github.com/dujiao-next/internal/models"
+	paymentprovider "github.com/dujiao-next/internal/payment/provider"
 	"github.com/dujiao-next/internal/queue"
 	"github.com/dujiao-next/internal/repository"
 	"github.com/dujiao-next/internal/service"
@@ -104,6 +106,10 @@ type Container struct {
 	AdProxyService            *service.AdProxyService
 	MediaService              *service.MediaService
 	OrderRiskControlService   *service.OrderRiskControlService
+	ComplianceService         *service.ComplianceService
+
+	// 支付网关 Provider 注册表(P1.2 Phase 1 引入,pilot 阶段仅注册 stripe + paypal)
+	PaymentProviderRegistry *paymentprovider.Registry
 }
 
 // NewContainer 初始化容器
@@ -124,9 +130,27 @@ func NewContainer(cfg *config.Config) *Container {
 		}
 	}
 
+	// 实例化支付 provider 注册表并注册所有 9 个 adapter。
+	// P1.2a 注册 pilot: stripe + paypal
+	// P1.2b Task 2-8 完成的 7 个 new adapter wrapper: wechat/alipay/epay/epusdt/bepusdt/tokenpay/okpay
+	// 必须在 initServices() 之前完成,以便 PaymentService 构造时可注入。
+	// 所有 adapter 注册完成后,旧 switch case 即可整体移除(Task 10)。
+	paymentRegistry := paymentprovider.NewRegistry()
+	paymentRegistry.Register(constants.PaymentProviderOfficial, constants.PaymentChannelTypeStripe, paymentprovider.NewStripeAdapter())
+	paymentRegistry.Register(constants.PaymentProviderOfficial, constants.PaymentChannelTypePaypal, paymentprovider.NewPaypalAdapter())
+	// P1.2b Task 2-8: 新增 7 个 adapter (wechat/alipay/epay/epusdt/bepusdt/tokenpay/okpay)
+	paymentRegistry.Register(constants.PaymentProviderOfficial, constants.PaymentChannelTypeWechat, paymentprovider.NewWechatpayAdapter())
+	paymentRegistry.Register(constants.PaymentProviderOfficial, constants.PaymentChannelTypeAlipay, paymentprovider.NewAlipayAdapter())
+	paymentRegistry.Register(constants.PaymentProviderEpay, "", paymentprovider.NewEpayAdapter())
+	paymentRegistry.Register(constants.PaymentProviderEpusdt, "", paymentprovider.NewEpusdtAdapter())
+	paymentRegistry.Register(constants.PaymentProviderBepusdt, "", paymentprovider.NewBepusdtAdapter())
+	paymentRegistry.Register(constants.PaymentProviderTokenpay, "", paymentprovider.NewTokenpayAdapter())
+	paymentRegistry.Register(constants.PaymentProviderOkpay, "", paymentprovider.NewOkpayAdapter())
+
 	c := &Container{
-		Config:      cfg,
-		QueueClient: queueClient,
+		Config:                  cfg,
+		QueueClient:             queueClient,
+		PaymentProviderRegistry: paymentRegistry,
 	}
 
 	// 1. 初始化 Repositories
@@ -197,6 +221,7 @@ func (c *Container) initServices() {
 	}
 
 	c.SettingService = service.NewSettingService(c.SettingRepo, c.Config.Order)
+	c.ComplianceService = service.NewComplianceService(c.SettingRepo)
 	smtpSetting, err := c.SettingService.GetSMTPSetting(c.Config.Email)
 	if err != nil {
 		logger.Warnw("provider_load_smtp_setting_failed", "error", err)
@@ -232,13 +257,14 @@ func (c *Container) initServices() {
 	c.CategoryService = service.NewCategoryService(c.CategoryRepo)
 	c.SitemapService = service.NewSitemapService(c.ProductRepo, c.CategoryRepo, c.PostRepo)
 	c.CartService = service.NewCartService(c.CartRepo, c.ProductRepo, c.ProductSKURepo, c.PromotionRepo, c.SettingService)
-	c.WalletService = service.NewWalletService(c.WalletRepo, c.OrderRepo, c.UserRepo, c.AffiliateService, c.SettingService)
+	c.WalletService = service.NewWalletService(c.WalletRepo, c.OrderRepo, c.OrderRefundRecordRepo, c.UserRepo, c.AffiliateService, c.SettingService)
 	c.OrderRefundService = service.NewOrderRefundService(c.OrderRepo, c.UserRepo, c.OrderRefundRecordRepo, c.AffiliateService, c.SettingService)
 	c.MemberLevelService = service.NewMemberLevelService(c.MemberLevelRepo, c.MemberLevelPriceRepo, c.UserRepo)
 	c.OrderRiskControlService = service.NewOrderRiskControlService(c.SettingService, c.OrderRepo)
 	c.OrderService = service.NewOrderService(service.OrderServiceOptions{
 		OrderRepo:             c.OrderRepo,
 		OrderRefundRecordRepo: c.OrderRefundRecordRepo,
+		PaymentRepo:           c.PaymentRepo,
 		UserRepo:              c.UserRepo,
 		ProductRepo:           c.ProductRepo,
 		ProductSKURepo:        c.ProductSKURepo,
@@ -274,26 +300,29 @@ func (c *Container) initServices() {
 	c.SiteConnectionService = service.NewSiteConnectionService(c.SiteConnectionRepo, c.Config.App.SecretKey, "uploads")
 	c.ProductMappingService = service.NewProductMappingService(c.ProductMappingRepo, c.SKUMappingRepo, c.ProductRepo, c.ProductSKURepo, c.CategoryRepo, c.SiteConnectionService)
 	c.ProductMappingService.SetCategoryService(c.CategoryService)
+	c.ProductMappingService.SetSettingService(c.SettingService)
+	c.OrderService.SetProductMappingService(c.ProductMappingService)
 	c.DownstreamCallbackService = service.NewDownstreamCallbackService(c.DownstreamOrderRefRepo, c.OrderRepo, c.ApiCredentialRepo, c.QueueClient)
 	c.PaymentService = service.NewPaymentService(service.PaymentServiceOptions{
-		OrderRepo:             c.OrderRepo,
-		ProductRepo:           c.ProductRepo,
-		ProductSKURepo:        c.ProductSKURepo,
-		PaymentRepo:           c.PaymentRepo,
-		ChannelRepo:           c.PaymentChannelRepo,
-		WalletRepo:            c.WalletRepo,
-		UserRepo:              c.UserRepo,
-		UserOAuthIdentityRepo: c.UserOAuthIdentityRepo,
-		QueueClient:           c.QueueClient,
-		WalletService:         c.WalletService,
-		SettingService:        c.SettingService,
-		DefaultEmailConfig:    c.Config.Email,
-		ExpireMinutes:         c.Config.Order.PaymentExpireMinutes,
-		AffiliateService:      c.AffiliateService,
-		NotificationService:   c.NotificationService,
+		OrderRepo:               c.OrderRepo,
+		ProductRepo:             c.ProductRepo,
+		ProductSKURepo:          c.ProductSKURepo,
+		PaymentRepo:             c.PaymentRepo,
+		ChannelRepo:             c.PaymentChannelRepo,
+		WalletRepo:              c.WalletRepo,
+		UserRepo:                c.UserRepo,
+		UserOAuthIdentityRepo:   c.UserOAuthIdentityRepo,
+		QueueClient:             c.QueueClient,
+		WalletService:           c.WalletService,
+		SettingService:          c.SettingService,
+		DefaultEmailConfig:      c.Config.Email,
+		ExpireMinutes:           c.Config.Order.PaymentExpireMinutes,
+		AffiliateService:        c.AffiliateService,
+		NotificationService:     c.NotificationService,
+		PaymentProviderRegistry: c.PaymentProviderRegistry,
 	})
 	c.ProcurementOrderService = service.NewProcurementOrderService(
-		c.ProcurementOrderRepo, c.OrderRepo, c.ProductMappingRepo, c.SKUMappingRepo,
+		c.ProcurementOrderRepo, c.OrderRepo, c.FulfillmentRepo, c.ProductMappingRepo, c.SKUMappingRepo,
 		c.SiteConnectionService, c.QueueClient, c.SettingService, c.Config.Email, c.FulfillmentService,
 	)
 	c.ReconciliationService = service.NewReconciliationService(

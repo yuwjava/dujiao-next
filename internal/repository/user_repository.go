@@ -89,6 +89,9 @@ func (r *GormUserRepository) Update(user *models.User) error {
 func (r *GormUserRepository) List(filter UserListFilter) ([]models.User, int64, error) {
 	query := r.db.Model(&models.User{})
 
+	if filter.UserID != 0 {
+		query = query.Where("users.id = ?", filter.UserID)
+	}
 	if filter.Keyword != "" {
 		like := "%" + filter.Keyword + "%"
 		query = query.Where(

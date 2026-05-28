@@ -96,6 +96,7 @@ func BuiltinRoleSeeds() []RoleSeed {
 				{Object: "/admin/users/:id/wallet/transactions", Action: "GET"},
 				{Object: "/admin/users/:id/wallet/adjust", Action: "POST"},
 				{Object: "/admin/users/:id/member-level", Action: "PUT"},
+				{Object: "/admin/users/:id/oauth/telegram", Action: "DELETE"},
 				{Object: "/admin/users/:id/2fa", Action: "DELETE"}, // 客服协助用户重置丢失 TOTP+恢复码 的 2FA
 				{Object: "/admin/user-login-logs", Action: "GET"},
 				{Object: "/admin/wallet/recharges", Action: "GET"},
@@ -210,6 +211,8 @@ func BuiltinRoleSeeds() []RoleSeed {
 				// Telegram Bot 群发
 				{Object: "/admin/telegram-bot/broadcasts", Action: "*"},
 				{Object: "/admin/telegram-bot/users", Action: "GET"},
+				// 合规声明（GET 已由 readonly_auditor 的 /admin/* GET 通配覆盖）
+				{Object: "/admin/compliance/acknowledge", Action: "POST"},
 			},
 			Immutable: true,
 		},

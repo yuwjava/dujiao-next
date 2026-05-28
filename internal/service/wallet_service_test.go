@@ -42,10 +42,11 @@ func setupWalletServiceTest(t *testing.T) (*WalletService, *gorm.DB) {
 	models.DB = db
 	walletRepo := repository.NewWalletRepository(db)
 	orderRepo := repository.NewOrderRepository(db)
+	refundRecordRepo := repository.NewOrderRefundRecordRepository(db)
 	userRepo := repository.NewUserRepository(db)
 	affiliateSvc := NewAffiliateService(repository.NewAffiliateRepository(db), nil, nil, nil, nil)
 	settingSvc := NewSettingService(repository.NewSettingRepository(db))
-	return NewWalletService(walletRepo, orderRepo, userRepo, affiliateSvc, settingSvc), db
+	return NewWalletService(walletRepo, orderRepo, refundRecordRepo, userRepo, affiliateSvc, settingSvc), db
 }
 
 func createTestUser(t *testing.T, db *gorm.DB, id uint) {

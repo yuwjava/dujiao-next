@@ -11,7 +11,6 @@ import (
 
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 // AdminManualRefundInput 管理员手动退款输入（不处理钱包/支付渠道）
@@ -234,14 +233,14 @@ func (s *OrderRefundService) AdminManualRefund(input AdminManualRefundInput) (*m
 	}
 
 	if err := s.orderRepo.Transaction(func(tx *gorm.DB) error {
-		var order models.Order
-		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-			First(&order, input.OrderID).Error; err != nil {
-			if err == gorm.ErrRecordNotFound {
-				return ErrOrderNotFound
-			}
+		locked, err := s.orderRepo.WithTx(tx).GetByIDForUpdate(input.OrderID)
+		if err != nil {
 			return err
 		}
+		if locked == nil {
+			return ErrOrderNotFound
+		}
+		order := *locked
 		if order.PaidAt == nil {
 			return ErrOrderStatusInvalid
 		}
@@ -269,7 +268,7 @@ func (s *OrderRefundService) AdminManualRefund(input AdminManualRefundInput) (*m
 		} else {
 			updates["status"] = constants.OrderStatusPartiallyRefunded
 		}
-		if err := tx.Model(&models.Order{}).Where("id = ?", order.ID).Updates(updates).Error; err != nil {
+		if err := s.orderRepo.WithTx(tx).UpdateFields(order.ID, updates); err != nil {
 			return ErrOrderUpdateFailed
 		}
 		if order.ParentID == nil {
@@ -277,7 +276,7 @@ func (s *OrderRefundService) AdminManualRefund(input AdminManualRefundInput) (*m
 			if markRefunded {
 				targetStatus = constants.OrderStatusRefunded
 			}
-			if err := applyParentRefundChildStatusUpdatesTx(tx, order.ID, targetStatus, now); err != nil {
+			if err := applyParentRefundChildStatusUpdates(s.orderRepo.WithTx(tx), order.ID, targetStatus, now); err != nil {
 				return ErrOrderUpdateFailed
 			}
 		}

@@ -275,7 +275,7 @@ func (s *CardSecretService) ExportCardSecrets(ids []uint, batchID uint, filter L
 	default:
 		return nil, "", ErrCardSecretInvalid
 	}
-	normalizedIDs, err := s.resolveBatchTargetCardSecretIDs(ids, batchID, filter)
+	normalizedIDs, err := s.resolveExportTargetCardSecretIDs(ids, batchID, filter)
 	if err != nil {
 		return nil, "", err
 	}
@@ -334,6 +334,25 @@ func (s *CardSecretService) ExportCardSecrets(ids []uint, batchID uint, filter L
 		return nil, "", ErrCardSecretFetchFailed
 	}
 	return buffer.Bytes(), "text/csv; charset=utf-8", nil
+}
+
+func (s *CardSecretService) resolveExportTargetCardSecretIDs(ids []uint, batchID uint, filter ListCardSecretInput) ([]uint, error) {
+	normalizedIDs, err := s.resolveBatchTargetCardSecretIDs(ids, batchID, filter)
+	if err == nil {
+		return normalizedIDs, nil
+	}
+	if !errors.Is(err, ErrCardSecretInvalid) || len(normalizeCardSecretIDs(ids)) > 0 || batchID != 0 || s.hasListFilter(filter) {
+		return nil, err
+	}
+
+	targetIDs, err := s.secretRepo.ListIDs(s.buildRepositoryFilter(filter))
+	if err != nil {
+		return nil, ErrCardSecretFetchFailed
+	}
+	if len(targetIDs) == 0 {
+		return nil, ErrNotFound
+	}
+	return targetIDs, nil
 }
 
 func (s *CardSecretService) resolveBatchTargetCardSecretIDs(ids []uint, batchID uint, filter ListCardSecretInput) ([]uint, error) {

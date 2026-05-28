@@ -480,6 +480,59 @@ func TestCardSecretServiceSupportsBatchTargetOperations(t *testing.T) {
 	}
 }
 
+func TestExportCardSecretsWithEmptyFilterExportsCurrentResults(t *testing.T) {
+	db := setupCardSecretServiceTestDB(t)
+
+	product := &models.Product{
+		CategoryID:      1,
+		Slug:            "card-secret-export-empty-filter",
+		TitleJSON:       models.JSON{"zh-CN": "卡密导出商品"},
+		PriceAmount:     models.NewMoneyFromDecimal(decimal.NewFromInt(20)),
+		PurchaseType:    constants.ProductPurchaseMember,
+		FulfillmentType: constants.FulfillmentTypeAuto,
+		IsActive:        true,
+	}
+	if err := db.Create(product).Error; err != nil {
+		t.Fatalf("create product failed: %v", err)
+	}
+	defaultSKU := &models.ProductSKU{
+		ProductID:   product.ID,
+		SKUCode:     models.DefaultSKUCode,
+		PriceAmount: models.NewMoneyFromDecimal(decimal.NewFromInt(20)),
+		IsActive:    true,
+	}
+	if err := db.Create(defaultSKU).Error; err != nil {
+		t.Fatalf("create default sku failed: %v", err)
+	}
+
+	svc := NewCardSecretService(
+		repository.NewCardSecretRepository(db),
+		repository.NewCardSecretBatchRepository(db),
+		repository.NewProductRepository(db),
+		repository.NewProductSKURepository(db),
+	)
+	if _, _, err := svc.CreateCardSecretBatch(CreateCardSecretBatchInput{
+		ProductID: product.ID,
+		Secrets:   []string{"EMPTY-FILTER-001", "EMPTY-FILTER-002"},
+		BatchNo:   "EMPTY-FILTER",
+		Source:    constants.CardSecretSourceManual,
+	}); err != nil {
+		t.Fatalf("create card secret batch failed: %v", err)
+	}
+
+	content, contentType, err := svc.ExportCardSecrets(nil, 0, ListCardSecretInput{}, constants.ExportFormatTXT)
+	if err != nil {
+		t.Fatalf("export with empty filter failed: %v", err)
+	}
+	if contentType != "text/plain; charset=utf-8" {
+		t.Fatalf("content type want text/plain got %s", contentType)
+	}
+	exported := string(content)
+	if !strings.Contains(exported, "EMPTY-FILTER-001") || !strings.Contains(exported, "EMPTY-FILTER-002") {
+		t.Fatalf("exported content missing current results: %s", exported)
+	}
+}
+
 func TestCardSecretServiceSupportsKeywordAndBatchNoFilters(t *testing.T) {
 	db := setupCardSecretServiceTestDB(t)
 

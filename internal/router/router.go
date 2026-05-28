@@ -63,8 +63,12 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 	}
 
 	// 中间件
-	r.Use(gin.Recovery())
+	// RequestIDMiddleware 必须前置于 RecoveryMiddleware:
+	// 它本身不会 panic(仅做 uuid 生成 + c.Set + Header.Set),先注入 request_id 才能
+	// 保证 RecoveryMiddleware 在 panic 时拿到的 request_id 一定不为空——既用于日志关联,
+	// 也用于 response body 的 request_id 字段。
 	r.Use(RequestIDMiddleware())
+	r.Use(RecoveryMiddleware())
 	r.Use(LoggerMiddleware(log))
 	r.Use(CORSMiddleware(cfg.CORS))
 	r.Use(CallbackRouteMiddleware(c.SettingService, publicHandler, upstreamHandler))
@@ -254,7 +258,14 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 
 			// 需要鉴权的接口
 			authorized := admin.Use(JWTAuthMiddleware(cfg.JWT.SecretKey, c.AdminRepo), AdminRBACMiddleware(c.AuthzService))
+			// 支付/财务相关受保护子组：未确认合规声明时拦截
+			// 注：admin.Use(...) 已 mutate admin 自身，新 Group 继承 JWT + RBAC 中间件
+			paymentProtected := admin.Group("", PaymentComplianceRequired(c.ComplianceService))
 			{
+				// 合规声明
+				authorized.GET("/compliance/status", adminHandler.GetComplianceStatus)
+				authorized.POST("/compliance/acknowledge", adminHandler.AcknowledgeCompliance)
+
 				// 仪表盘
 				authorized.GET("/dashboard/overview", adminHandler.GetDashboardOverview)
 				authorized.GET("/dashboard/trends", adminHandler.GetDashboardTrends)
@@ -335,10 +346,10 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 				authorized.GET("/affiliates/users", adminHandler.ListAffiliateUsers)
 				authorized.PATCH("/affiliates/users/:id/status", adminHandler.UpdateAffiliateUserStatus)
 				authorized.PATCH("/affiliates/users/batch-status", adminHandler.BatchUpdateAffiliateUserStatus)
-				authorized.GET("/affiliates/commissions", adminHandler.ListAffiliateCommissions)
-				authorized.GET("/affiliates/withdraws", adminHandler.ListAffiliateWithdraws)
-				authorized.POST("/affiliates/withdraws/:id/reject", adminHandler.RejectAffiliateWithdraw)
-				authorized.POST("/affiliates/withdraws/:id/pay", adminHandler.PayAffiliateWithdraw)
+				paymentProtected.GET("/affiliates/commissions", adminHandler.ListAffiliateCommissions)
+				paymentProtected.GET("/affiliates/withdraws", adminHandler.ListAffiliateWithdraws)
+				paymentProtected.POST("/affiliates/withdraws/:id/reject", adminHandler.RejectAffiliateWithdraw)
+				paymentProtected.POST("/affiliates/withdraws/:id/pay", adminHandler.PayAffiliateWithdraw)
 
 				// 权限管理
 				authorized.GET("/authz/me", adminHandler.GetAuthzMe)
@@ -416,28 +427,29 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 				authorized.POST("/member-levels/backfill", adminHandler.BackfillMemberLevels)
 
 				// 支付渠道与支付记录
-				authorized.POST("/payment-channels", adminHandler.CreatePaymentChannel)
-				authorized.GET("/payment-channels", adminHandler.GetPaymentChannels)
-				authorized.GET("/payment-channels/:id", adminHandler.GetPaymentChannel)
-				authorized.PUT("/payment-channels/:id", adminHandler.UpdatePaymentChannel)
-				authorized.DELETE("/payment-channels/:id", adminHandler.DeletePaymentChannel)
-				authorized.GET("/payments", adminHandler.GetAdminPayments)
-				authorized.GET("/payments/export", adminHandler.ExportAdminPayments)
-				authorized.GET("/payments/:id", adminHandler.GetAdminPayment)
+				paymentProtected.POST("/payment-channels", adminHandler.CreatePaymentChannel)
+				paymentProtected.GET("/payment-channels", adminHandler.GetPaymentChannels)
+				paymentProtected.GET("/payment-channels/:id", adminHandler.GetPaymentChannel)
+				paymentProtected.PUT("/payment-channels/:id", adminHandler.UpdatePaymentChannel)
+				paymentProtected.DELETE("/payment-channels/:id", adminHandler.DeletePaymentChannel)
+				paymentProtected.GET("/payments", adminHandler.GetAdminPayments)
+				paymentProtected.GET("/payments/export", adminHandler.ExportAdminPayments)
+				paymentProtected.GET("/payments/:id", adminHandler.GetAdminPayment)
 
 				// 用户管理
 				authorized.GET("/users", adminHandler.GetAdminUsers)
 				authorized.GET("/user-login-logs", adminHandler.GetUserLoginLogs)
 				authorized.PUT("/users/batch-status", adminHandler.BatchUpdateUserStatus)
+				authorized.DELETE("/users/:id/oauth/telegram", adminHandler.UnbindAdminUserTelegram)
 				authorized.GET("/users/:id", adminHandler.GetAdminUser)
 				authorized.PUT("/users/:id", adminHandler.UpdateAdminUser)
 				authorized.GET("/users/:id/coupon-usages", adminHandler.GetAdminUserCouponUsages)
-				authorized.GET("/users/:id/wallet", adminHandler.GetAdminUserWallet)
-				authorized.GET("/users/:id/wallet/transactions", adminHandler.GetAdminUserWalletTransactions)
-				authorized.POST("/users/:id/wallet/adjust", adminHandler.AdjustAdminUserWallet)
+				paymentProtected.GET("/users/:id/wallet", adminHandler.GetAdminUserWallet)
+				paymentProtected.GET("/users/:id/wallet/transactions", adminHandler.GetAdminUserWalletTransactions)
+				paymentProtected.POST("/users/:id/wallet/adjust", adminHandler.AdjustAdminUserWallet)
 				authorized.PUT("/users/:id/member-level", adminHandler.SetUserMemberLevel)
 				authorized.DELETE("/users/:id/2fa", adminHandler.ResetUser2FA)
-				authorized.GET("/wallet/recharges", adminHandler.GetAdminWalletRecharges)
+				paymentProtected.GET("/wallet/recharges", adminHandler.GetAdminWalletRecharges)
 
 				// API 凭证审核管理
 				authorized.GET("/api-credentials", adminHandler.GetApiCredentials)
@@ -481,10 +493,10 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 				authorized.POST("/procurement-orders/:id/cancel", adminHandler.CancelProcurementOrder)
 
 				// 对账管理
-				authorized.POST("/reconciliation/run", adminHandler.RunReconciliation)
-				authorized.GET("/reconciliation/jobs", adminHandler.GetReconciliationJobs)
-				authorized.GET("/reconciliation/jobs/:id", adminHandler.GetReconciliationJob)
-				authorized.PUT("/reconciliation/items/:id/resolve", adminHandler.ResolveReconciliationItem)
+				paymentProtected.POST("/reconciliation/run", adminHandler.RunReconciliation)
+				paymentProtected.GET("/reconciliation/jobs", adminHandler.GetReconciliationJobs)
+				paymentProtected.GET("/reconciliation/jobs/:id", adminHandler.GetReconciliationJob)
+				paymentProtected.PUT("/reconciliation/items/:id/resolve", adminHandler.ResolveReconciliationItem)
 
 				// 渠道客户端管理
 				authorized.GET("/channel-clients", adminHandler.ListChannelClients)

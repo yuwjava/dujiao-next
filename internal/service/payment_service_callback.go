@@ -500,7 +500,8 @@ func (s *PaymentService) enqueueOrderPaidAsync(order *models.Order, payment *mod
 			)
 		}
 	}
-	if s.queueClient != nil {
+	if s.queueClient != nil && !isOrderFullyAutoFulfill(order) {
+		// 完全自动交付的订单会紧接着发送含卡密内容的"已完成"邮件，跳过"已支付"邮件避免重复打扰
 		if _, err := enqueueOrderStatusEmailTaskIfEligible(s.orderRepo, s.queueClient, s.settingService, s.defaultEmailConfig, order.ID, constants.OrderStatusPaid); err != nil {
 			log.Warnw("payment_enqueue_status_email_failed",
 				"order_id", order.ID,

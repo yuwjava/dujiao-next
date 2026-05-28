@@ -22,6 +22,8 @@ type CategoryRepository interface {
 	CountProducts(categoryID string) (int64, error)
 	CountActiveProducts(categoryID string) (int64, error)
 	GetBySlug(slug string) (*models.Category, error)
+	GetBySlugUnscoped(slug string) (*models.Category, error)
+	Restore(category *models.Category) error
 }
 
 // GormCategoryRepository GORM 实现
@@ -125,6 +127,30 @@ func (r *GormCategoryRepository) GetBySlug(slug string) (*models.Category, error
 		return nil, err
 	}
 	return &category, nil
+}
+
+// GetBySlugUnscoped 根据 slug 获取分类，包含软删除记录。
+func (r *GormCategoryRepository) GetBySlugUnscoped(slug string) (*models.Category, error) {
+	var category models.Category
+	if err := r.db.Unscoped().Where("slug = ?", slug).First(&category).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &category, nil
+}
+
+// Restore 恢复软删除分类并刷新展示信息。
+func (r *GormCategoryRepository) Restore(category *models.Category) error {
+	return r.db.Unscoped().Model(&models.Category{}).Where("id = ?", category.ID).Updates(map[string]interface{}{
+		"parent_id":  category.ParentID,
+		"name_json":  category.NameJSON,
+		"icon":       category.Icon,
+		"sort_order": category.SortOrder,
+		"is_active":  category.IsActive,
+		"deleted_at": nil,
+	}).Error
 }
 
 // CountActiveProducts 统计某分类下已上架商品数

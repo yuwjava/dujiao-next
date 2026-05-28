@@ -969,10 +969,89 @@ func (s *ProductService) QuickUpdate(id string, fields map[string]interface{}) (
 	if product == nil {
 		return nil, ErrNotFound
 	}
+	if isQuickUpdateActivatingProduct(fields) {
+		categoryID := product.CategoryID
+		if rawCategoryID, ok := fields["category_id"]; ok {
+			parsedCategoryID, parseErr := quickUpdateCategoryID(rawCategoryID)
+			if parseErr != nil {
+				return nil, ErrProductCategoryInvalid
+			}
+			categoryID = parsedCategoryID
+		}
+		if err := validateProductActivationCategory(s.categoryRepo, categoryID); err != nil {
+			return nil, err
+		}
+	}
 	if err := s.repo.QuickUpdate(id, fields); err != nil {
 		return nil, err
 	}
 	return s.repo.GetByID(id)
+}
+
+func isQuickUpdateActivatingProduct(fields map[string]interface{}) bool {
+	raw, ok := fields["is_active"]
+	if !ok {
+		return false
+	}
+	value, ok := raw.(bool)
+	return ok && value
+}
+
+func quickUpdateCategoryID(value interface{}) (uint, error) {
+	switch v := value.(type) {
+	case uint:
+		return v, nil
+	case uint64:
+		return uint(v), nil
+	case uint32:
+		return uint(v), nil
+	case int:
+		if v < 0 {
+			return 0, ErrProductCategoryInvalid
+		}
+		return uint(v), nil
+	case int64:
+		if v < 0 {
+			return 0, ErrProductCategoryInvalid
+		}
+		return uint(v), nil
+	case int32:
+		if v < 0 {
+			return 0, ErrProductCategoryInvalid
+		}
+		return uint(v), nil
+	case float64:
+		if v < 0 || v != float64(uint(v)) {
+			return 0, ErrProductCategoryInvalid
+		}
+		return uint(v), nil
+	default:
+		return 0, ErrProductCategoryInvalid
+	}
+}
+
+func validateProductActivationCategory(categoryRepo repository.CategoryRepository, categoryID uint) error {
+	if categoryID == 0 || categoryRepo == nil {
+		return ErrProductCategoryInvalid
+	}
+
+	categoryIDText := strconv.FormatUint(uint64(categoryID), 10)
+	category, err := categoryRepo.GetByID(categoryIDText)
+	if err != nil {
+		return err
+	}
+	if category == nil || !category.IsActive {
+		return ErrProductCategoryInvalid
+	}
+
+	childCount, err := categoryRepo.CountChildren(categoryIDText)
+	if err != nil {
+		return err
+	}
+	if childCount > 0 {
+		return ErrProductCategoryInvalid
+	}
+	return nil
 }
 
 // ApplyAutoStockCounts 聚合卡密自动发货库存信息并填充到商品中
