@@ -132,7 +132,6 @@ func NewWalletRechargePaymentPayload(recharge *models.WalletRechargeOrder, payme
 		p.InteractionMode = payment.InteractionMode
 		p.PayURL = payment.PayURL
 		p.QRCode = payment.QRCode
-		p.JSAPIParams = ExtractJSAPIParams(payment.ProviderPayload)
 		p.ExpiresAt = payment.ExpiredAt
 		p.Status = payment.Status
 		p.WalletAddress, p.ChainAmount = ExtractUSDTWalletInfo(

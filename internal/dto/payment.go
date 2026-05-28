@@ -40,7 +40,6 @@ func NewCreatePaymentResp(result *service.CreatePaymentResult) CreatePaymentResp
 		resp.InteractionMode = result.Payment.InteractionMode
 		resp.PayURL = result.Payment.PayURL
 		resp.QRCode = result.Payment.QRCode
-		resp.JSAPIParams = ExtractJSAPIParams(result.Payment.ProviderPayload)
 		resp.ExpiresAt = result.Payment.ExpiredAt
 		resp.WalletAddress, resp.ChainAmount = ExtractUSDTWalletInfo(
 			result.Payment.ProviderType,
