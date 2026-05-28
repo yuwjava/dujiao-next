@@ -233,6 +233,9 @@ func (h *Handler) CreateWalletRecharge(c *gin.Context) {
 			paymentBlock["chain_amount"] = chainAmount
 		}
 	}
+	if params := dto.ExtractJSAPIParams(result.Payment.ProviderPayload); len(params) > 0 {
+		paymentBlock["jsapi_params"] = params
+	}
 
 	respondChannelSuccess(c, gin.H{
 		"recharge_no": result.Recharge.RechargeNo,

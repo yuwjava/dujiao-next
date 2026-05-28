@@ -388,6 +388,9 @@ func (h *Handler) CreateOrderAndPay(c *gin.Context) {
 				resp["chain_amount"] = chainAmount
 			}
 		}
+		if params := dto.ExtractJSAPIParams(result.Payment.ProviderPayload); len(params) > 0 {
+			resp["jsapi_params"] = params
+		}
 		resp["expires_at"] = result.Payment.ExpiredAt
 	}
 	response.Success(c, resp)

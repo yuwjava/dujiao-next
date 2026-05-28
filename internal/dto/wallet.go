@@ -106,6 +106,7 @@ type WalletRechargePaymentPayload struct {
 	InteractionMode string              `json:"interaction_mode,omitempty"`
 	PayURL          string              `json:"pay_url,omitempty"`
 	QRCode          string              `json:"qr_code,omitempty"`
+	JSAPIParams     map[string]string   `json:"jsapi_params,omitempty"`
 	WalletAddress   string              `json:"wallet_address,omitempty"`
 	ChainAmount     string              `json:"chain_amount,omitempty"`
 	ExpiresAt       *time.Time          `json:"expires_at,omitempty"`
@@ -134,6 +135,7 @@ func NewWalletRechargePaymentPayload(recharge *models.WalletRechargeOrder, payme
 		p.QRCode = payment.QRCode
 		p.ExpiresAt = payment.ExpiredAt
 		p.Status = payment.Status
+		p.JSAPIParams = ExtractJSAPIParams(payment.ProviderPayload)
 		p.WalletAddress, p.ChainAmount = ExtractUSDTWalletInfo(
 			payment.ProviderType,
 			payment.InteractionMode,

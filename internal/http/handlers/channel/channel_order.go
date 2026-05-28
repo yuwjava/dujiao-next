@@ -912,6 +912,9 @@ func buildChannelPaymentResponse(order *models.Order, payment *models.Payment) g
 			resp["chain_amount"] = chainAmount
 		}
 	}
+	if params := dto.ExtractJSAPIParams(payment.ProviderPayload); len(params) > 0 {
+		resp["jsapi_params"] = params
+	}
 	if order != nil {
 		resp["order_no"] = order.OrderNo
 		resp["total_amount"] = order.TotalAmount.StringFixed(2)
