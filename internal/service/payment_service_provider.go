@@ -54,6 +54,9 @@ func (s *PaymentService) applyProviderPayment(input CreatePaymentInput, order *m
 	if interactionMode := strings.TrimSpace(channel.InteractionMode); interactionMode != "" {
 		extra["interaction_mode"] = interactionMode
 	}
+	if openID := strings.TrimSpace(input.OpenID); openID != "" {
+		extra["openid"] = openID
+	}
 	// order_user_key 是 tokenpay 必须的稳定用户标识符；其他 adapter 忽略此字段。
 	extra["order_user_key"] = resolveTokenPayOrderUserKey(order)
 

@@ -104,6 +104,7 @@ func (a *wechatpayAdapter) CreatePayment(ctx context.Context, raw models.JSON, i
 	// P1.2c Task 3: wechat 回跳使用 cfg.H5RedirectURL，wrapper 没有直接访问该字段的路径，
 	// 且 wechat H5 回跳时由微信自行携带 open_id 等参数，marker 附加无意义。
 	// input.ReturnURLQuery 在此 adapter 中不使用；wechat 回跳 marker 由 callback handler 设计。
+	openID, _ := input.Extra["openid"].(string)
 	native := wechatpay.CreateInput{
 		OrderNo:     input.OrderNo,
 		Amount:      payAmount,
@@ -111,6 +112,7 @@ func (a *wechatpayAdapter) CreatePayment(ctx context.Context, raw models.JSON, i
 		Description: input.Subject,
 		ClientIP:    input.ClientIP,
 		NotifyURL:   input.NotifyURL,
+		OpenID:      openID,
 	}
 	result, err := wechatpay.CreatePayment(ctx, cfg, native, interactionMode)
 	if err != nil {
