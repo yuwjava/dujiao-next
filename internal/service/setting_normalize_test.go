@@ -75,8 +75,9 @@ func TestUpdateSiteSettingNormalized(t *testing.T) {
 			"site_icon": "  /uploads/site/icon.png  ",
 		},
 		"contact": map[string]interface{}{
-			"telegram": "  https://t.me/demo  ",
-			"whatsapp": 123,
+			"telegram":      "  https://t.me/demo  ",
+			"whatsapp":      123,
+			"wechat_qrcode": "  /uploads/common/qrcode.jpg  ",
 		},
 		"seo": map[string]interface{}{
 			"title": map[string]interface{}{
@@ -182,6 +183,9 @@ func TestUpdateSiteSettingNormalized(t *testing.T) {
 	}
 	if contact["whatsapp"] != "" {
 		t.Fatalf("unexpected whatsapp: %v", contact["whatsapp"])
+	}
+	if contact["wechat_qrcode"] != "/uploads/common/qrcode.jpg" {
+		t.Fatalf("unexpected wechat_qrcode: %v", contact["wechat_qrcode"])
 	}
 
 	seo, ok := result["seo"].(map[string]interface{})
