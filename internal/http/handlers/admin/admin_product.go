@@ -84,6 +84,7 @@ type ProductSKURequest struct {
 	ID               uint                   `json:"id"`
 	SKUCode          string                 `json:"sku_code" binding:"required"`
 	SpecValuesJSON   map[string]interface{} `json:"spec_values"`
+	ImageURL         string                 `json:"image_url"`
 	PriceAmount      float64                `json:"price_amount" binding:"required"`
 	CostPriceAmount  float64                `json:"cost_price_amount"`
 	ManualStockTotal int                    `json:"manual_stock_total"`
@@ -127,6 +128,7 @@ func toProductSKUInputs(items []ProductSKURequest) []service.ProductSKUInput {
 			ID:               item.ID,
 			SKUCode:          item.SKUCode,
 			SpecValuesJSON:   item.SpecValuesJSON,
+			ImageURL:         item.ImageURL,
 			PriceAmount:      decimal.NewFromFloat(item.PriceAmount),
 			CostPriceAmount:  decimal.NewFromFloat(item.CostPriceAmount),
 			ManualStockTotal: item.ManualStockTotal,

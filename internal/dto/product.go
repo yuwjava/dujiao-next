@@ -50,6 +50,7 @@ type SKUResp struct {
 	ID                 uint         `json:"id"`
 	SKUCode            string       `json:"sku_code"`
 	SpecValues         models.JSON  `json:"spec_values"`
+	ImageURL           string       `json:"image_url,omitempty"`
 	PriceAmount        models.Money `json:"price_amount"`
 	ManualStockTotal   int          `json:"manual_stock_total"`
 	ManualStockSold    int          `json:"manual_stock_sold"`

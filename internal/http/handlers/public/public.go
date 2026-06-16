@@ -56,6 +56,7 @@ func (v *publicProductView) toProductResp() dto.ProductResp {
 			ID:                   sv.ID,
 			SKUCode:              sv.SKUCode,
 			SpecValues:           sv.SpecValuesJSON,
+			ImageURL:             sv.ImageURL,
 			PriceAmount:          sv.PriceAmount,
 			ManualStockTotal:     sv.ManualStockTotal,
 			ManualStockSold:      sv.ManualStockSold,

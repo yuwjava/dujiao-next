@@ -81,6 +81,7 @@ type ProductSKUInput struct {
 	ID               uint
 	SKUCode          string
 	SpecValuesJSON   map[string]interface{}
+	ImageURL         string
 	PriceAmount      decimal.Decimal
 	CostPriceAmount  decimal.Decimal
 	ManualStockTotal int
@@ -530,6 +531,7 @@ type normalizedProductSKU struct {
 	ID               uint
 	SKUCode          string
 	SpecValuesJSON   models.JSON
+	ImageURL         string
 	PriceAmount      models.Money
 	CostPriceAmount  models.Money
 	ManualStockTotal int
@@ -590,11 +592,13 @@ func normalizeProductSKUInputs(inputs []ProductSKUInput, fulfillmentType string,
 		if input.SpecValuesJSON != nil {
 			specValues = models.JSON(input.SpecValuesJSON)
 		}
+		imageURL := strings.TrimSpace(input.ImageURL)
 
 		normalized = append(normalized, normalizedProductSKU{
 			ID:               input.ID,
 			SKUCode:          skuCode,
 			SpecValuesJSON:   specValues,
+			ImageURL:         imageURL,
 			PriceAmount:      models.NewMoneyFromDecimal(priceAmount),
 			CostPriceAmount:  models.NewMoneyFromDecimal(costPriceAmount),
 			ManualStockTotal: manualTotal,
@@ -678,6 +682,7 @@ func applyProductSKUsWithStockGuard(
 			}
 			existing.SKUCode = row.SKUCode
 			existing.SpecValuesJSON = row.SpecValuesJSON
+			existing.ImageURL = row.ImageURL
 			existing.PriceAmount = row.PriceAmount
 			existing.CostPriceAmount = row.CostPriceAmount
 			existing.ManualStockTotal = row.ManualStockTotal
@@ -694,6 +699,7 @@ func applyProductSKUsWithStockGuard(
 		codeKey := strings.ToLower(strings.TrimSpace(row.SKUCode))
 		if existing, ok := existingByCode[codeKey]; ok {
 			existing.SpecValuesJSON = row.SpecValuesJSON
+			existing.ImageURL = row.ImageURL
 			existing.PriceAmount = row.PriceAmount
 			existing.CostPriceAmount = row.CostPriceAmount
 			existing.ManualStockTotal = row.ManualStockTotal
@@ -714,6 +720,7 @@ func applyProductSKUsWithStockGuard(
 			ProductID:         productID,
 			SKUCode:           row.SKUCode,
 			SpecValuesJSON:    row.SpecValuesJSON,
+			ImageURL:          row.ImageURL,
 			PriceAmount:       row.PriceAmount,
 			CostPriceAmount:   row.CostPriceAmount,
 			ManualStockTotal:  row.ManualStockTotal,
