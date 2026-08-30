@@ -60,6 +60,7 @@ func (r *GormProductRepository) List(filter ProductListFilter) ([]models.Product
 	if filter.OnlyActive {
 		query = query.Where("products.is_active = ?", true)
 		query = query.Where("EXISTS (SELECT 1 FROM categories c WHERE c.id = products.category_id AND c.is_active = ? AND c.deleted_at IS NULL)", true)
+		query = query.Where("(NOT EXISTS (SELECT 1 FROM product_skus ps0 WHERE ps0.product_id = products.id AND ps0.deleted_at IS NULL) OR EXISTS (SELECT 1 FROM product_skus ps1 WHERE ps1.product_id = products.id AND ps1.is_active = ? AND ps1.deleted_at IS NULL))", true)
 		query = query.Preload("SKUs", func(db *gorm.DB) *gorm.DB {
 			return db.Where("is_active = ?", true).Order("sort_order DESC, id ASC")
 		})
@@ -180,6 +181,7 @@ func (r *GormProductRepository) GetBySlug(slug string, onlyActive bool) (*models
 	if onlyActive {
 		query = query.Where("products.is_active = ?", true)
 		query = query.Where("EXISTS (SELECT 1 FROM categories c WHERE c.id = products.category_id AND c.is_active = ? AND c.deleted_at IS NULL)", true)
+		query = query.Where("(NOT EXISTS (SELECT 1 FROM product_skus ps0 WHERE ps0.product_id = products.id AND ps0.deleted_at IS NULL) OR EXISTS (SELECT 1 FROM product_skus ps1 WHERE ps1.product_id = products.id AND ps1.is_active = ? AND ps1.deleted_at IS NULL))", true)
 		query = query.Preload("SKUs", func(db *gorm.DB) *gorm.DB {
 			return db.Where("is_active = ?", true).Order("sort_order DESC, id ASC")
 		})

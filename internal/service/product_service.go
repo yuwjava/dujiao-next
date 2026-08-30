@@ -759,7 +759,6 @@ func ensureAutoSKUCardSecretStockSafe(
 		return nil
 	}
 
-	nextActive := make(map[uint]bool, len(existingRows))
 	kept := make(map[uint]struct{}, len(rows))
 	for _, row := range rows {
 		if row.ID > 0 {
@@ -767,26 +766,20 @@ func ensureAutoSKUCardSecretStockSafe(
 			if !ok {
 				return ErrProductSKUInvalid
 			}
-			nextActive[existing.ID] = row.IsActive
 			kept[existing.ID] = struct{}{}
 			continue
 		}
 
 		codeKey := strings.ToLower(strings.TrimSpace(row.SKUCode))
 		if existing, ok := existingByCode[codeKey]; ok {
-			nextActive[existing.ID] = row.IsActive
 			kept[existing.ID] = struct{}{}
 		}
 	}
 
 	for _, existing := range existingRows {
-		if _, ok := nextActive[existing.ID]; !ok {
-			nextActive[existing.ID] = false
-		}
-		if _, ok := kept[existing.ID]; !ok {
-			nextActive[existing.ID] = false
-		}
-		if !existing.IsActive || nextActive[existing.ID] {
+		// 停用保留的 SKU 不影响其既有卡密库存；只有从提交中移除 SKU
+		// 才属于删除，仍需阻止有库存的 SKU 被删除。
+		if _, ok := kept[existing.ID]; ok {
 			continue
 		}
 		total, available, used, err := cardSecretRepo.CountByProduct(productID, existing.ID)

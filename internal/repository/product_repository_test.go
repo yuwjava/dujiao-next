@@ -344,7 +344,7 @@ func TestListStockStatusAutoUsesLowStockThreshold(t *testing.T) {
 }
 
 func TestProductRepositoryListSortOrderDescending(t *testing.T) {
-	repo, _ := setupProductRepositoryTest(t)
+	repo, db := setupProductRepositoryTest(t)
 
 	high := &models.Product{
 		CategoryID:  1,
@@ -368,6 +368,8 @@ func TestProductRepositoryListSortOrderDescending(t *testing.T) {
 	if err := repo.Create(low); err != nil {
 		t.Fatalf("create low sort product failed: %v", err)
 	}
+	createManualSKU(t, db, high.ID, "HIGH-SKU", 10, 0, 0, true)
+	createManualSKU(t, db, low.ID, "LOW-SKU", 10, 0, 0, true)
 
 	rows, total, err := repo.List(ProductListFilter{
 		Page:       1,
@@ -388,8 +390,35 @@ func TestProductRepositoryListSortOrderDescending(t *testing.T) {
 	}
 }
 
+func TestProductRepositoryOnlyActiveHidesProductsWithoutActiveSKUs(t *testing.T) {
+	repo, db := setupProductRepositoryTest(t)
+
+	visible := createManualProduct(t, repo, "visible-with-active-sku", 10, 0, 0)
+	createManualSKU(t, db, visible.ID, "VISIBLE-ACTIVE", 10, 0, 0, true)
+	createManualSKU(t, db, visible.ID, "VISIBLE-INACTIVE", 10, 0, 0, false)
+
+	hidden := createManualProduct(t, repo, "hidden-without-active-sku", 10, 0, 0)
+	createManualSKU(t, db, hidden.ID, "HIDDEN-INACTIVE", 10, 0, 0, false)
+
+	products, total, err := repo.List(ProductListFilter{OnlyActive: true, Page: 1, PageSize: 20})
+	if err != nil {
+		t.Fatalf("list active products failed: %v", err)
+	}
+	if total != 1 || len(products) != 1 || products[0].ID != visible.ID {
+		t.Fatalf("expected only product with active SKU, total=%d products=%#v", total, products)
+	}
+
+	got, err := repo.GetBySlug(hidden.Slug, true)
+	if err != nil {
+		t.Fatalf("get hidden product failed: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("expected product without active SKU to be hidden, got %#v", got)
+	}
+}
+
 func TestProductRepositoryListSupportsNumericIDSearch(t *testing.T) {
-	repo, _ := setupProductRepositoryTest(t)
+	repo, db := setupProductRepositoryTest(t)
 
 	target := &models.Product{
 		CategoryID:      1,
@@ -416,6 +445,8 @@ func TestProductRepositoryListSupportsNumericIDSearch(t *testing.T) {
 	if err := repo.Create(other); err != nil {
 		t.Fatalf("create other product failed: %v", err)
 	}
+	createManualSKU(t, db, target.ID, "TARGET-SKU", 10, 0, 0, true)
+	createManualSKU(t, db, other.ID, "OTHER-SKU", 10, 0, 0, true)
 
 	rows, total, err := repo.List(ProductListFilter{
 		Page:       1,

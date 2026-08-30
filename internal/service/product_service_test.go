@@ -650,7 +650,7 @@ func TestProductServiceUpdateKeepsMappedProductFulfillmentUpstream(t *testing.T)
 	}
 }
 
-func TestProductServiceUpdateRejectsDisablingAutoSKUWithCardSecretStock(t *testing.T) {
+func TestProductServiceUpdateAllowsDisablingAutoSKUWithCardSecretStock(t *testing.T) {
 	svc, db := newProductServiceForTest(t)
 
 	category := models.Category{
@@ -699,7 +699,7 @@ func TestProductServiceUpdateRejectsDisablingAutoSKUWithCardSecretStock(t *testi
 
 	insertCardSecrets(t, db, product.ID, stockSKU.ID, models.CardSecretStatusAvailable, 1)
 
-	_, err := svc.Update(strconv.FormatUint(uint64(product.ID), 10), CreateProductInput{
+	updated, err := svc.Update(strconv.FormatUint(uint64(product.ID), 10), CreateProductInput{
 		CategoryID:      category.ID,
 		Slug:            product.Slug,
 		TitleJSON:       map[string]interface{}{"zh-CN": "auto-card-secret-product"},
@@ -735,8 +735,34 @@ func TestProductServiceUpdateRejectsDisablingAutoSKUWithCardSecretStock(t *testi
 			return &value
 		}(),
 	})
+	if err != nil {
+		t.Fatalf("update product should allow disabling SKU with card secret stock: %v", err)
+	}
+	if updated == nil {
+		t.Fatal("expected updated product")
+	}
+	var savedStockSKU models.ProductSKU
+	if err := db.First(&savedStockSKU, stockSKU.ID).Error; err != nil {
+		t.Fatalf("reload stock SKU failed: %v", err)
+	}
+	if savedStockSKU.IsActive {
+		t.Fatal("stock SKU should be inactive after update")
+	}
+
+	_, err = svc.Update(strconv.FormatUint(uint64(product.ID), 10), CreateProductInput{
+		CategoryID:      category.ID,
+		Slug:            product.Slug,
+		TitleJSON:       map[string]interface{}{"zh-CN": "auto-card-secret-product"},
+		PriceAmount:     decimal.NewFromInt(10),
+		PurchaseType:    constants.ProductPurchaseMember,
+		FulfillmentType: constants.FulfillmentTypeAuto,
+		SKUs: []ProductSKUInput{
+			{ID: spareSKU.ID, SKUCode: spareSKU.SKUCode, PriceAmount: decimal.NewFromInt(10), IsActive: func() *bool { value := true; return &value }()},
+		},
+		IsActive: func() *bool { value := true; return &value }(),
+	})
 	if err != ErrProductSKUHasCardSecretStock {
-		t.Fatalf("update product error want %v got %v", ErrProductSKUHasCardSecretStock, err)
+		t.Fatalf("deleting SKU with card secret stock should remain blocked, got %v", err)
 	}
 }
 
