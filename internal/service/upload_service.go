@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -9,11 +10,13 @@ import (
 	"mime/multipart"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/dujiao-next/internal/config"
+	"github.com/dujiao-next/internal/logger"
 
 	_ "image/gif"
 	_ "image/jpeg"
@@ -21,6 +24,8 @@ import (
 
 	"github.com/google/uuid"
 )
+
+const webpSidecarTimeout = 15 * time.Second
 
 var allowedUploadScenes = map[string]struct{}{
 	"product":  {},
@@ -34,7 +39,9 @@ var allowedUploadScenes = map[string]struct{}{
 
 // UploadService 文件上传服务
 type UploadService struct {
-	cfg *config.Config
+	cfg           *config.Config
+	cwebpLookPath func(file string) (string, error)
+	cwebpRunner   func(ctx context.Context, bin string, args ...string) ([]byte, error)
 }
 
 // UploadValidationError 表示上传内容不符合业务校验规则，可直接展示给管理员。
@@ -57,7 +64,13 @@ func IsUploadValidationError(err error) bool {
 
 // NewUploadService 创建文件上传服务实例
 func NewUploadService(cfg *config.Config) *UploadService {
-	return &UploadService{cfg: cfg}
+	return &UploadService{
+		cfg:           cfg,
+		cwebpLookPath: exec.LookPath,
+		cwebpRunner: func(ctx context.Context, bin string, args ...string) ([]byte, error) {
+			return exec.CommandContext(ctx, bin, args...).CombinedOutput()
+		},
+	}
 }
 
 // UploadResult 上传结果（包含完整元数据）
@@ -187,11 +200,19 @@ func (s *UploadService) SaveFileWithMeta(file *multipart.FileHeader, scene strin
 	if err != nil {
 		return nil, err
 	}
-	defer dst.Close()
 
-	_, err = io.Copy(dst, src)
-	if err != nil {
-		return nil, err
+	_, copyErr := io.Copy(dst, src)
+	closeErr := dst.Close()
+	if copyErr != nil {
+		return nil, copyErr
+	}
+	if closeErr != nil {
+		return nil, closeErr
+	}
+
+	// 当原图是 .png / .jpg / .jpeg 时，尝试旁路生成同名 .webp 副本（失败仅记日志，绝不阻断原图上传）
+	if shouldGenerateWebPSidecar(ext) {
+		s.tryGenerateWebPSidecar(savePath)
 	}
 
 	return &UploadResult{
@@ -202,6 +223,50 @@ func (s *UploadService) SaveFileWithMeta(file *multipart.FileHeader, scene strin
 		Width:    imgWidth,
 		Height:   imgHeight,
 	}, nil
+}
+
+// shouldGenerateWebPSidecar 判断文件扩展名是否需要旁路生成 .webp 副本
+func shouldGenerateWebPSidecar(ext string) bool {
+	switch strings.ToLower(strings.TrimSpace(ext)) {
+	case ".png", ".jpg", ".jpeg":
+		return true
+	default:
+		return false
+	}
+}
+
+// tryGenerateWebPSidecar 在原图同路径旁路生成 <savePath>.webp；系统无 cwebp 时静默跳过，执行失败仅记录警告日志
+func (s *UploadService) tryGenerateWebPSidecar(savePath string) {
+	lookPath := s.cwebpLookPath
+	if lookPath == nil {
+		lookPath = exec.LookPath
+	}
+	cwebpBin, err := lookPath("cwebp")
+	if err != nil || strings.TrimSpace(cwebpBin) == "" {
+		// 开发环境或未安装 libwebp-tools 时静默跳过
+		return
+	}
+
+	runner := s.cwebpRunner
+	if runner == nil {
+		runner = func(ctx context.Context, bin string, args ...string) ([]byte, error) {
+			return exec.CommandContext(ctx, bin, args...).CombinedOutput()
+		}
+	}
+
+	webpPath := savePath + ".webp"
+	ctx, cancel := context.WithTimeout(context.Background(), webpSidecarTimeout)
+	defer cancel()
+
+	out, runErr := runner(ctx, cwebpBin, "-q", "82", "-mt", savePath, "-o", webpPath)
+	if runErr != nil {
+		logger.Warnw("upload_generate_webp_failed",
+			"source", savePath,
+			"target", webpPath,
+			"error", runErr,
+			"output", strings.TrimSpace(string(out)),
+		)
+	}
 }
 
 func normalizeUploadScene(raw string) string {

@@ -104,10 +104,55 @@ type urlSet struct {
 }
 
 func (s *SitemapService) collectURLs(baseURL string) ([]urlEntry, error) {
-	now := time.Now().UTC().Format("2006-01-02")
-	entries := make([]urlEntry, 0, 64)
+	// 先拉取启用的分类、上架商品与已发布文章，用以计算静态页面的真实最新更新日期
+	categories, err := s.categoryRepo.ListActive()
+	if err != nil {
+		return nil, fmt.Errorf("sitemap: list categories: %w", err)
+	}
 
-	// 1. 静态页面
+	products, _, err := s.productRepo.List(repository.ProductListFilter{
+		Page:       1,
+		PageSize:   sitemapMaxFetch,
+		OnlyActive: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sitemap: list products: %w", err)
+	}
+
+	posts, _, err := s.postRepo.List(repository.PostListFilter{
+		Page:          1,
+		PageSize:      sitemapMaxFetch,
+		OnlyPublished: true,
+		OrderBy:       "published_at DESC, created_at DESC",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("sitemap: list posts: %w", err)
+	}
+
+	var latestContentTime time.Time
+	for _, p := range products {
+		if !p.UpdatedAt.IsZero() && p.UpdatedAt.After(latestContentTime) {
+			latestContentTime = p.UpdatedAt
+		}
+	}
+	for _, post := range posts {
+		postMod := post.CreatedAt
+		if post.PublishedAt != nil && !post.PublishedAt.IsZero() {
+			postMod = *post.PublishedAt
+		}
+		if !postMod.IsZero() && postMod.After(latestContentTime) {
+			latestContentTime = postMod
+		}
+	}
+
+	staticLastMod := ""
+	if !latestContentTime.IsZero() {
+		staticLastMod = latestContentTime.UTC().Format("2006-01-02")
+	}
+
+	entries := make([]urlEntry, 0, 16+len(categories)+len(products)+len(posts))
+
+	// 1. 静态页面（LastMod 取最新上架商品/已发布文章的真实更新日期；若库为空则省略）
 	staticPages := []struct {
 		Path       string
 		ChangeFreq string
@@ -124,17 +169,13 @@ func (s *SitemapService) collectURLs(baseURL string) ([]urlEntry, error) {
 	for _, p := range staticPages {
 		entries = append(entries, urlEntry{
 			Loc:        baseURL + p.Path,
-			LastMod:    now,
+			LastMod:    staticLastMod,
 			ChangeFreq: p.ChangeFreq,
 			Priority:   p.Priority,
 		})
 	}
 
 	// 2. 启用的分类
-	categories, err := s.categoryRepo.ListActive()
-	if err != nil {
-		return nil, fmt.Errorf("sitemap: list categories: %w", err)
-	}
 	for _, cat := range categories {
 		entries = append(entries, urlEntry{
 			Loc:        baseURL + "/categories/" + url.PathEscape(cat.Slug),
@@ -145,14 +186,6 @@ func (s *SitemapService) collectURLs(baseURL string) ([]urlEntry, error) {
 	}
 
 	// 3. 上架的商品（OnlyActive 已含分类启用过滤）
-	products, _, err := s.productRepo.List(repository.ProductListFilter{
-		Page:       1,
-		PageSize:   sitemapMaxFetch,
-		OnlyActive: true,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("sitemap: list products: %w", err)
-	}
 	for _, p := range products {
 		entries = append(entries, urlEntry{
 			Loc:        baseURL + "/products/" + url.PathEscape(p.Slug),
@@ -163,18 +196,9 @@ func (s *SitemapService) collectURLs(baseURL string) ([]urlEntry, error) {
 	}
 
 	// 4. 已发布的博客 / 公告
-	posts, _, err := s.postRepo.List(repository.PostListFilter{
-		Page:          1,
-		PageSize:      sitemapMaxFetch,
-		OnlyPublished: true,
-		OrderBy:       "published_at DESC, created_at DESC",
-	})
-	if err != nil {
-		return nil, fmt.Errorf("sitemap: list posts: %w", err)
-	}
 	for _, post := range posts {
 		lastmod := post.CreatedAt
-		if post.PublishedAt != nil {
+		if post.PublishedAt != nil && !post.PublishedAt.IsZero() {
 			lastmod = *post.PublishedAt
 		}
 		// blog 与 notice 共用 /blog/:slug 详情页（user 前台 Notice.vue 跳转到 /blog/{slug}）

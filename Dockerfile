@@ -25,7 +25,7 @@ FROM docker.m.daocloud.io/library/alpine:latest
 
 WORKDIR /app
 
-RUN apk --no-cache add ca-certificates tzdata \
+RUN apk --no-cache add ca-certificates tzdata libwebp-tools \
     && mkdir -p /app/db /app/uploads /app/logs
 
 COPY --from=builder /out/dujiao-api /app/dujiao-api

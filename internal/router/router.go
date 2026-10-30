@@ -2,7 +2,9 @@ package router
 
 import (
 	"fmt"
+	"io/fs"
 	"net/http"
+	"path"
 	"sort"
 	"strings"
 
@@ -527,6 +529,7 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 	})
 
 	// 嵌入式前端资源（仅在 -tags fullstack 构建时生效）
+	var embeddedUserFS fs.FS
 	if web.Enabled() {
 		if err := web.ValidateAdminPath(cfg.Web.AdminPath); err != nil {
 			log.Sugar().Fatalf("web.admin_path 配置错误: %v", err)
@@ -534,12 +537,77 @@ func SetupRouter(cfg *config.Config, c *provider.Container) *gin.Engine {
 		if err := web.RegisterAdmin(r, cfg.Web.AdminPath, web.AdminFS()); err != nil {
 			log.Sugar().Fatalf("注册 admin SPA 失败: %v", err)
 		}
-		if err := web.RegisterUser(r, web.UserFS()); err != nil {
-			log.Sugar().Fatalf("注册 user SPA 失败: %v", err)
-		}
+		embeddedUserFS = web.UserFS()
 	}
 
+	// 页面级动态 HTML 壳注入与真实 HTTP 404 守卫（落实 ADR-0002）
+	r.NoRoute(buildPageNoRouteHandler(cfg.Web.AdminPath, publicHandler, embeddedUserFS))
+
 	return r
+}
+
+// buildPageNoRouteHandler 处理所有未命中显式路由的请求：
+// 1. /api/* 未知接口保持原有 JSON 404 响应；
+// 2. /uploads/* 与管理端未知请求直接返回 404；
+// 3. fullstack 模式下优先服务嵌入式静态资源文件；
+// 4. 其余 GET/HEAD 页面请求交由动态 HTML 壳与真实 404 守卫渲染。
+func buildPageNoRouteHandler(adminPath string, publicHandler *publichandlers.Handler, userFS fs.FS) gin.HandlerFunc {
+	var userFileServer http.Handler
+	if userFS != nil {
+		userFileServer = http.FileServer(http.FS(userFS))
+	}
+	trimmedAdmin := strings.TrimSpace(adminPath)
+
+	return func(c *gin.Context) {
+		reqPath := c.Request.URL.Path
+
+		if reqPath == "/api" || strings.HasPrefix(reqPath, "/api/") {
+			response.ErrorWithHTTPStatus(c, http.StatusNotFound, response.CodeNotFound, "not found")
+			return
+		}
+
+		if reqPath == "/uploads" || strings.HasPrefix(reqPath, "/uploads/") {
+			c.Status(http.StatusNotFound)
+			return
+		}
+
+		if trimmedAdmin != "" && trimmedAdmin != "/" && (reqPath == trimmedAdmin || strings.HasPrefix(reqPath, trimmedAdmin+"/")) {
+			c.Status(http.StatusNotFound)
+			return
+		}
+
+		if userFileServer != nil && userFS != nil {
+			fp := strings.TrimPrefix(reqPath, "/")
+			if fp != "" && fp != "index.html" && hasEmbeddedStaticFile(userFS, fp) {
+				userFileServer.ServeHTTP(c.Writer, c.Request)
+				return
+			}
+		}
+
+		if c.Request.Method != http.MethodGet && c.Request.Method != http.MethodHead {
+			c.Status(http.StatusNotFound)
+			return
+		}
+
+		publicHandler.ServeHTMLPage(c)
+	}
+}
+
+func hasEmbeddedStaticFile(fsys fs.FS, name string) bool {
+	cleaned := path.Clean(name)
+	if cleaned == "." || cleaned == "/" {
+		return false
+	}
+	f, err := fsys.Open(cleaned)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	stat, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return !stat.IsDir()
 }
 
 type adminPermissionCatalogItem struct {

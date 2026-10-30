@@ -172,3 +172,74 @@ func TestSitemapServiceGenerateRejectsEmptyBaseURL(t *testing.T) {
 		t.Fatalf("expected error for empty base url")
 	}
 }
+
+func TestSitemapServiceStaticLastModUsesLatestContentOrOmitsWhenEmpty(t *testing.T) {
+	t.Run("空数据库时省略静态页 lastmod", func(t *testing.T) {
+		svc, _ := newSitemapServiceForTest(t)
+		xmlStr, err := svc.Generate(context.Background(), "https://empty.example.com")
+		if err != nil {
+			t.Fatalf("生成空库 sitemap 失败: %v", err)
+		}
+		if strings.Contains(xmlStr, "<lastmod>") {
+			t.Fatalf("空库静态页不应输出虚假的当日 <lastmod>，实际输出:\n%s", xmlStr)
+		}
+	})
+
+	t.Run("存在商品与文章时静态页取最新真实更新日期", func(t *testing.T) {
+		svc, db := newSitemapServiceForTest(t)
+
+		cat := models.Category{
+			Slug:      "kejiaoban",
+			NameJSON:  models.JSON{"zh-CN": "教科版"},
+			IsActive:  true,
+			CreatedAt: time.Date(2025, 1, 10, 8, 0, 0, 0, time.UTC),
+		}
+		if err := db.Create(&cat).Error; err != nil {
+			t.Fatalf("创建分类失败: %v", err)
+		}
+
+		prodUpdated := time.Date(2025, 6, 15, 12, 0, 0, 0, time.UTC)
+		prod := models.Product{
+			CategoryID:      cat.ID,
+			Slug:            "grade-3-unit-1",
+			TitleJSON:       models.JSON{"zh-CN": "三年级上册第一单元课件"},
+			PriceAmount:     models.NewMoneyFromDecimal(decimal.NewFromInt(19)),
+			PurchaseType:    constants.ProductPurchaseGuest,
+			FulfillmentType: constants.FulfillmentTypeAuto,
+			IsActive:        true,
+		}
+		if err := db.Create(&prod).Error; err != nil {
+			t.Fatalf("创建商品失败: %v", err)
+		}
+		if err := db.Model(&models.Product{}).Where("id = ?", prod.ID).UpdateColumn("updated_at", prodUpdated).Error; err != nil {
+			t.Fatalf("更新商品时间失败: %v", err)
+		}
+
+		postPub := time.Date(2025, 8, 20, 9, 30, 0, 0, time.UTC)
+		post := models.Post{
+			Slug:        "science-guide",
+			Type:        constants.PostTypeBlog,
+			TitleJSON:   models.JSON{"zh-CN": "小学科学实验备课指南"},
+			IsPublished: true,
+			PublishedAt: &postPub,
+		}
+		if err := db.Create(&post).Error; err != nil {
+			t.Fatalf("创建文章失败: %v", err)
+		}
+
+		xmlStr, err := svc.Generate(context.Background(), "https://dated.example.com")
+		if err != nil {
+			t.Fatalf("生成 sitemap 失败: %v", err)
+		}
+
+		// 最新日期应为文章发布日 2025-08-20，而非当前系统日期
+		expectedStaticSnippet := "<loc>https://dated.example.com/</loc>\n    <lastmod>2025-08-20</lastmod>"
+		if !strings.Contains(xmlStr, expectedStaticSnippet) {
+			t.Fatalf("静态首页应使用最新内容更新日期 2025-08-20，实际输出:\n%s", xmlStr)
+		}
+		today := time.Now().UTC().Format("2006-01-02")
+		if today != "2025-08-20" && strings.Contains(xmlStr, "<lastmod>"+today+"</lastmod>") {
+			t.Fatalf("不应无脑写入当天日期 %s，实际输出:\n%s", today, xmlStr)
+		}
+	})
+}

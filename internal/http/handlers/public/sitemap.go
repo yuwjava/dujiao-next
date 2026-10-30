@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/dujiao-next/internal/logger"
+	"github.com/dujiao-next/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -46,7 +47,7 @@ func (h *Handler) GetRobots(c *gin.Context) {
 
 // resolveSitemapBaseURL 站点 URL 优先取后台 brand.site_url，否则回落到当前请求 Host
 func (h *Handler) resolveSitemapBaseURL(c *gin.Context) string {
-	if h.SettingService != nil {
+	if h.Container != nil && h.SettingService != nil {
 		if brand, err := h.SettingService.GetSiteBrand(); err == nil {
 			if u := strings.TrimRight(strings.TrimSpace(brand.SiteURL), "/"); u != "" {
 				return u
@@ -64,6 +65,9 @@ func (h *Handler) resolveSitemapBaseURL(c *gin.Context) string {
 	host := c.Request.Host
 	if forwardedHost := c.GetHeader("X-Forwarded-Host"); forwardedHost != "" {
 		host = forwardedHost
+	}
+	if strings.TrimSpace(host) == "" {
+		return service.DefaultShopBaseURL
 	}
 	return scheme + "://" + host
 }

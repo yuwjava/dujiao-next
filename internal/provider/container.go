@@ -77,6 +77,7 @@ type Container struct {
 	CategoryService           *service.CategoryService
 	SettingService            *service.SettingService
 	SitemapService            *service.SitemapService
+	HTMLShellService          *service.HTMLShellService
 	CartService               *service.CartService
 	WalletService             *service.WalletService
 	OrderRefundService        *service.OrderRefundService
@@ -256,6 +257,13 @@ func (c *Container) initServices() {
 	c.PostService = service.NewPostService(c.PostRepo)
 	c.CategoryService = service.NewCategoryService(c.CategoryRepo)
 	c.SitemapService = service.NewSitemapService(c.ProductRepo, c.CategoryRepo, c.PostRepo)
+	c.HTMLShellService = service.NewHTMLShellService(service.HTMLShellOptions{
+		ProductRepo:    c.ProductRepo,
+		CategoryRepo:   c.CategoryRepo,
+		PostRepo:       c.PostRepo,
+		SettingService: c.SettingService,
+		ProductService: c.ProductService,
+	})
 	c.CartService = service.NewCartService(c.CartRepo, c.ProductRepo, c.ProductSKURepo, c.PromotionRepo, c.SettingService)
 	c.WalletService = service.NewWalletService(c.WalletRepo, c.OrderRepo, c.OrderRefundRecordRepo, c.UserRepo, c.AffiliateService, c.SettingService)
 	c.OrderRefundService = service.NewOrderRefundService(c.OrderRepo, c.UserRepo, c.OrderRefundRecordRepo, c.AffiliateService, c.SettingService)

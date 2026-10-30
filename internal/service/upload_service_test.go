@@ -2,9 +2,16 @@ package service
 
 import (
 	"bytes"
+	"context"
+	"errors"
+	"image"
+	"image/color"
+	"image/jpeg"
+	"image/png"
 	"mime/multipart"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -198,6 +205,137 @@ func TestValidateSVGSafety(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestUploadServiceWebPSidecarGeneration(t *testing.T) {
+	originalWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("获取当前工作目录失败: %v", err)
+	}
+	tempDir := t.TempDir()
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("切换临时工作目录失败: %v", err)
+	}
+	defer func() {
+		_ = os.Chdir(originalWD)
+	}()
+
+	cfg := &config.Config{}
+	cfg.Upload.MaxSize = 10 * 1024 * 1024
+	cfg.Upload.AllowedTypes = []string{"image/jpeg", "image/png"}
+	cfg.Upload.AllowedExtensions = []string{".jpg", ".jpeg", ".png"}
+
+	pngBytes := encodeSamplePNG(t)
+	jpgBytes := encodeSampleJPEG(t)
+
+	t.Run("存在 cwebp 时旁路生成同名 .webp 副本", func(t *testing.T) {
+		svc := NewUploadService(cfg)
+		var capturedArgs []string
+		svc.cwebpLookPath = func(file string) (string, error) {
+			return "/usr/bin/cwebp", nil
+		}
+		svc.cwebpRunner = func(ctx context.Context, bin string, args ...string) ([]byte, error) {
+			capturedArgs = append([]string(nil), args...)
+			// args 格式: -q 82 -mt <savePath> -o <savePath>.webp
+			target := args[len(args)-1]
+			if writeErr := os.WriteFile(target, []byte("RIFFmockWEBP"), 0644); writeErr != nil {
+				return nil, writeErr
+			}
+			return []byte("ok"), nil
+		}
+
+		fh := createMultipartFile(t, "banner.png", pngBytes)
+		savedURL, saveErr := svc.SaveFile(fh, "banner")
+		if saveErr != nil {
+			t.Fatalf("保存 PNG 图片失败: %v", saveErr)
+		}
+
+		localOrig := filepath.FromSlash(strings.TrimPrefix(savedURL, "/"))
+		localWebP := localOrig + ".webp"
+		if _, statErr := os.Stat(localOrig); statErr != nil {
+			t.Fatalf("原图未落盘: %v", statErr)
+		}
+		if _, statErr := os.Stat(localWebP); statErr != nil {
+			t.Fatalf("旁路 .webp 副本未生成: %v", statErr)
+		}
+
+		expectedArgs := []string{"-q", "82", "-mt", localOrig, "-o", localWebP}
+		if !reflect.DeepEqual(capturedArgs, expectedArgs) {
+			t.Fatalf("cwebp 调用参数不符，实际 %v，期望 %v", capturedArgs, expectedArgs)
+		}
+	})
+
+	t.Run("开发环境无 cwebp 时静默跳过且不影响原图上传", func(t *testing.T) {
+		svc := NewUploadService(cfg)
+		runnerCalled := false
+		svc.cwebpLookPath = func(file string) (string, error) {
+			return "", errors.New("executable file not found in $PATH")
+		}
+		svc.cwebpRunner = func(ctx context.Context, bin string, args ...string) ([]byte, error) {
+			runnerCalled = true
+			return nil, nil
+		}
+
+		fh := createMultipartFile(t, "cover.jpg", jpgBytes)
+		savedURL, saveErr := svc.SaveFile(fh, "product")
+		if saveErr != nil {
+			t.Fatalf("无 cwebp 时原图上传应成功，实际报错: %v", saveErr)
+		}
+		if runnerCalled {
+			t.Fatalf("未找到 cwebp 时不应执行转换命令")
+		}
+		localOrig := filepath.FromSlash(strings.TrimPrefix(savedURL, "/"))
+		if _, statErr := os.Stat(localOrig); statErr != nil {
+			t.Fatalf("原图未落盘: %v", statErr)
+		}
+		if _, statErr := os.Stat(localOrig + ".webp"); !os.IsNotExist(statErr) {
+			t.Fatalf("无 cwebp 时不应生成 .webp 文件")
+		}
+	})
+
+	t.Run("cwebp 转换失败时仅记录日志且绝不阻断原图返回", func(t *testing.T) {
+		svc := NewUploadService(cfg)
+		svc.cwebpLookPath = func(file string) (string, error) {
+			return "/usr/bin/cwebp", nil
+		}
+		svc.cwebpRunner = func(ctx context.Context, bin string, args ...string) ([]byte, error) {
+			return []byte("encoding error"), errors.New("exit status 1")
+		}
+
+		fh := createMultipartFile(t, "photo.jpeg", jpgBytes)
+		savedURL, saveErr := svc.SaveFile(fh, "product")
+		if saveErr != nil {
+			t.Fatalf("cwebp 报错不应阻断原图上传，实际报错: %v", saveErr)
+		}
+		localOrig := filepath.FromSlash(strings.TrimPrefix(savedURL, "/"))
+		if _, statErr := os.Stat(localOrig); statErr != nil {
+			t.Fatalf("原图未落盘: %v", statErr)
+		}
+	})
+}
+
+// encodeSamplePNG 生成合法最小 PNG 字节流供上传测试使用
+func encodeSamplePNG(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 8, 8))
+	img.Set(0, 0, color.RGBA{R: 16, G: 185, B: 129, A: 255})
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatalf("编码测试 PNG 失败: %v", err)
+	}
+	return buf.Bytes()
+}
+
+// encodeSampleJPEG 生成合法最小 JPEG 字节流供上传测试使用
+func encodeSampleJPEG(t *testing.T) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, 8, 8))
+	img.Set(0, 0, color.RGBA{R: 59, G: 130, B: 246, A: 255})
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 80}); err != nil {
+		t.Fatalf("编码测试 JPEG 失败: %v", err)
+	}
+	return buf.Bytes()
 }
 
 // createMultipartFile 辅助函数：创建模拟的 multipart 文件
