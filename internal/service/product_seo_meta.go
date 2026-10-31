@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/dujiao-next/internal/models"
 )
 
 // productReturnPolicyText 商品退换口径（写入 Product schema 的 MerchantReturnPolicy）
@@ -68,6 +70,19 @@ func (p parsedProductTitle) unitLabel() string {
 		return ""
 	}
 	return "第" + p.Unit + "单元"
+}
+
+// ResolveProductPageSEO 商品详情页最终的 <title> 与 meta description。
+// 服务端 HTML 壳与公开商品详情接口共用，保证前台 JS 渲染后与服务端输出一致。
+func ResolveProductPageSEO(p *models.Product) (title string, description string) {
+	if p == nil {
+		return "", ""
+	}
+	prodTitle := localizedJSONText(p.TitleJSON, p.Slug)
+	shortDesc := strings.TrimSpace(localizedJSONText(p.DescriptionJSON, ""))
+	title = BuildProductPageTitle(extractLocalizedFieldFromMap(p.SeoMetaJSON, "title"), prodTitle)
+	description = BuildStructuredProductDescription(extractLocalizedFieldFromMap(p.SeoMetaJSON, "description"), prodTitle, shortDesc)
+	return title, description
 }
 
 // BuildProductPageTitle 生成商品详情页 <title>：后台 seo_meta.title 优先，否则按标题解析结果套模板

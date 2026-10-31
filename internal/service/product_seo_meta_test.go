@@ -3,7 +3,53 @@ package service
 import (
 	"strings"
 	"testing"
+
+	"github.com/dujiao-next/internal/models"
 )
+
+func TestResolveProductPageSEO(t *testing.T) {
+	cases := []struct {
+		name      string
+		product   *models.Product
+		wantTitle string
+		wantDesc  string
+	}{
+		{
+			name:      "全走兜底",
+			product:   &models.Product{Slug: "x", TitleJSON: models.JSON{"zh-CN": "苏教版小科3-6年级知识手册"}},
+			wantTitle: "苏教版小学科学3-6年级知识手册｜备课箱",
+			wantDesc:  "苏教版小学科学3-6年级知识手册，Word文档，按单元汇总知识点，适合课前预习与单元复习，可直接打印。扫码购买，自动发货。",
+		},
+		{
+			name: "后台 seo_meta 的多语言 title 与 description 优先",
+			product: &models.Product{
+				Slug:      "y",
+				TitleJSON: models.JSON{"zh-CN": "教科版小科五下《热》单元课件"},
+				SeoMetaJSON: models.JSON{
+					"title":       models.JSON{"zh-CN": "五年级下册《热》单元课件"},
+					"description": models.JSON{"zh-CN": "五年级下册《热》单元课件，含温度与水的变化等 7 课时。"},
+				},
+			},
+			wantTitle: "五年级下册《热》单元课件｜备课箱",
+			wantDesc:  "五年级下册《热》单元课件，含温度与水的变化等 7 课时。",
+		},
+		{
+			name:      "无法解析时退回商品短描述",
+			product:   &models.Product{Slug: "z", TitleJSON: models.JSON{"zh-CN": "教科智慧教学平台视频批量下载器"}, DescriptionJSON: models.JSON{"zh-CN": "教科智慧教学平台视频批量下载器，支持单个和批量下载"}},
+			wantTitle: "教科智慧教学平台视频批量下载器｜备课箱小学科学",
+			wantDesc:  "教科智慧教学平台视频批量下载器，支持单个和批量下载",
+		},
+	}
+	for _, c := range cases {
+		title, desc := ResolveProductPageSEO(c.product)
+		if title != c.wantTitle || desc != c.wantDesc {
+			t.Errorf("%s：\n得到 %q / %q\n期望 %q / %q", c.name, title, desc, c.wantTitle, c.wantDesc)
+		}
+	}
+	if title, desc := ResolveProductPageSEO(nil); title != "" || desc != "" {
+		t.Errorf("nil 商品应返回空")
+	}
+}
 
 func TestParseProductTitle(t *testing.T) {
 	cases := []struct {

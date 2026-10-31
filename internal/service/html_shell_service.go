@@ -541,12 +541,8 @@ func (s *HTMLShellService) buildProductDetailPayload(baseURL string, slug string
 	canonical := baseURL + "/products/" + url.PathEscape(product.Slug)
 
 	// 标题与描述：优先采用后台 seo_meta，否则按商品名解析结果套兜底模板（product_seo_meta.go）
-	rawSeoTitle := extractLocalizedFieldFromMap(product.SeoMetaJSON, "title")
-	pageTitle := BuildProductPageTitle(rawSeoTitle, prodTitle)
-
+	pageTitle, finalDesc := ResolveProductPageSEO(product)
 	shortDesc := strings.TrimSpace(localizedJSONText(product.DescriptionJSON, ""))
-	rawSeoDesc := extractLocalizedFieldFromMap(product.SeoMetaJSON, "description")
-	finalDesc := BuildStructuredProductDescription(rawSeoDesc, prodTitle, shortDesc)
 
 	// 关键词
 	rawKeywords := strings.TrimSpace(extractKeywordsFromSeoMeta(product.SeoMetaJSON))

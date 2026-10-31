@@ -306,6 +306,8 @@ func (h *Handler) GetProductBySlug(c *gin.Context) {
 		return
 	}
 
+	decorated.SeoTitle, decorated.SeoDescription = service.ResolveProductPageSEO(product)
+
 	if posts, perr := h.PostService.ListPostsForProduct(product.ID, publicRelatedPostsLimit); perr == nil {
 		decorated.RelatedPosts = dto.NewRelatedPostCardList(posts)
 	}

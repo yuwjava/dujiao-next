@@ -41,6 +41,10 @@ type ProductResp struct {
 	PromotionRules       []PromotionRuleResp `json:"promotion_rules,omitempty"`
 	MemberPrices         []MemberLevelPrice  `json:"member_prices,omitempty"`
 
+	// 页面 <title> 与 meta description（仅商品详情接口填充，与服务端 HTML 壳同一套规则）
+	SeoTitle       string `json:"seo_title,omitempty"`
+	SeoDescription string `json:"seo_description,omitempty"`
+
 	// 关联文章（仅商品详情接口填充，列表接口不返回）
 	RelatedPosts []RelatedPostCard `json:"related_posts,omitempty"`
 }
