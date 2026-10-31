@@ -446,6 +446,35 @@ func TestHTMLShellServiceCategoryAndBlogAndPrivateRoutes(t *testing.T) {
 				t.Errorf("分类页缺少期望内容 %q\n实际 HTML:\n%s", s, res.HTML)
 			}
 		}
+		if strings.Contains(res.HTML, `name="robots"`) {
+			t.Errorf("有商品的分类页不应输出 noindex")
+		}
+	})
+
+	t.Run("没有商品的分类仍返回 200，但输出 noindex；非教材版本分类不冠“小学科学课件”", func(t *testing.T) {
+		emptyCat := models.Category{Slug: "xgj", NameJSON: models.JSON{"zh-CN": "小工具"}, IsActive: true}
+		if err := db.Create(&emptyCat).Error; err != nil {
+			t.Fatalf("创建空分类失败: %v", err)
+		}
+		res, err := svc.Render(context.Background(), "/categories/xgj", "https://shop.beikevip.site")
+		if err != nil {
+			t.Fatalf("渲染空分类失败: %v", err)
+		}
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("空分类期望 200，实际 %d", res.StatusCode)
+		}
+		for _, s := range []string{
+			`<meta name="robots" content="noindex, nofollow" />`,
+			`<title>小工具｜备课箱商城</title>`,
+			`<h1>小工具</h1>`,
+		} {
+			if !strings.Contains(res.HTML, s) {
+				t.Errorf("空分类页缺少期望内容 %q\n实际 HTML:\n%s", s, res.HTML)
+			}
+		}
+		if strings.Contains(res.HTML, "小工具小学科学课件") {
+			t.Errorf("非教材版本分类不应出现“小工具小学科学课件”")
+		}
 	})
 
 	t.Run("不存在分类或停用分类返回真实 HTTP 404", func(t *testing.T) {

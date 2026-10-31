@@ -96,8 +96,17 @@ func TestSitemapServiceIncludesActiveContent(t *testing.T) {
 		t.Fatalf("create hidden-category product: %v", err)
 	}
 
+	emptyCategory := models.Category{Slug: "coming-soon", NameJSON: models.JSON{"zh-CN": "人教版"}, IsActive: true}
+	if err := db.Create(&emptyCategory).Error; err != nil {
+		t.Fatalf("create empty category: %v", err)
+	}
+	noindexOnlyCategory := models.Category{Slug: "templates-only", NameJSON: models.JSON{"zh-CN": "PPT模板"}, IsActive: true}
+	if err := db.Create(&noindexOnlyCategory).Error; err != nil {
+		t.Fatalf("create noindex-only category: %v", err)
+	}
+
 	noindexProduct := models.Product{
-		CategoryID:      activeCategory.ID,
+		CategoryID:      noindexOnlyCategory.ID,
 		Slug:            "noindex-template",
 		TitleJSON:       models.JSON{"zh-CN": "p"},
 		SeoMetaJSON:     models.JSON{"noindex": true},
@@ -155,6 +164,8 @@ func TestSitemapServiceIncludesActiveContent(t *testing.T) {
 		"in-hidden-category", // 分类停用下的商品
 		"/blog/draft",        // 未发布文章
 		"noindex-template",   // 后台标记 noindex 的商品
+		"coming-soon",        // 没有商品的分类
+		"templates-only",     // 只有 noindex 商品的分类
 	}
 	for _, s := range mustNotContain {
 		if strings.Contains(xmlStr, s) {

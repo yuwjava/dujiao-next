@@ -384,7 +384,7 @@ func (s *HTMLShellService) buildHomePayload(baseURL string) pageSeoPayload {
 
 // buildProductsPayload 构建全部商品中心页面 SEO 载荷
 func (s *HTMLShellService) buildProductsPayload(baseURL string) pageSeoPayload {
-	title := "小学科学全版本课件资源中心 - 备课箱"
+	title := productsCenterHeading + " - 备课箱"
 	desc := verticalProductsDesc
 	canonical := baseURL + "/products"
 
@@ -394,27 +394,27 @@ func (s *HTMLShellService) buildProductsPayload(baseURL string) pageSeoPayload {
 
 	var snap strings.Builder
 	snap.WriteString(`<main class="seo-shell-products">`)
-	snap.WriteString(`<nav aria-label="面包屑"><a href="/">首页</a> / <span>小学科学全版本课件资源中心</span></nav>`)
-	snap.WriteString(`<h1>小学科学全版本课件资源中心</h1>`)
+	snap.WriteString(`<nav aria-label="面包屑"><a href="/">首页</a> / <span>` + productsCenterHeading + `</span></nav>`)
+	snap.WriteString(`<h1>` + productsCenterHeading + `</h1>`)
 	snap.WriteString(`<p>`)
 	snap.WriteString(html.EscapeString(desc))
 	snap.WriteString(`</p>`)
 
 	if len(categories) > 0 {
-		snap.WriteString(`<section><h2>按教材版本选课</h2><ul>`)
+		snap.WriteString(`<section><h2>按分类浏览</h2><ul>`)
 		for _, cat := range categories {
 			catName := localizedJSONText(cat.NameJSON, cat.Slug)
 			snap.WriteString(`<li><a href="/categories/`)
 			snap.WriteString(html.EscapeString(url.PathEscape(cat.Slug)))
 			snap.WriteString(`">`)
-			snap.WriteString(html.EscapeString(catName + "小学科学课件"))
+			snap.WriteString(html.EscapeString(categoryHeading(catName)))
 			snap.WriteString(`</a></li>`)
 		}
 		snap.WriteString(`</ul></section>`)
 	}
 
 	if len(products) > 0 {
-		snap.WriteString(`<section><h2>上架课件资源列表</h2><ul>`)
+		snap.WriteString(`<section><h2>全部在售资源</h2><ul>`)
 		for _, p := range products {
 			pTitle := localizedJSONText(p.TitleJSON, p.Slug)
 			snap.WriteString(`<li><a href="/products/`)
@@ -429,7 +429,7 @@ func (s *HTMLShellService) buildProductsPayload(baseURL string) pageSeoPayload {
 
 	breadcrumb := buildBreadcrumbJSONLD([]breadcrumbItem{
 		{Name: "首页", URL: baseURL + "/"},
-		{Name: "小学科学全版本课件资源中心", URL: canonical},
+		{Name: productsCenterHeading, URL: canonical},
 	})
 
 	return pageSeoPayload{
@@ -464,8 +464,8 @@ func (s *HTMLShellService) buildCategoryPayload(baseURL string, slug string) pag
 	}
 
 	catName := localizedJSONText(cat.NameJSON, cat.Slug)
-	h1Text := catName + "小学科学课件"
-	title := catName + "小学科学课件｜按年级单元选课 - 备课箱"
+	h1Text := categoryHeading(catName)
+	title := categoryPageTitle(catName)
 	// 分类里也有“小工具”“PPT模板”这类非课件分类，描述只写对任何分类都成立的内容
 	desc := "备课箱商城「" + catName + "」分类：浏览该分类下全部在售的小学科学备课资源，扫码购买，自动发货。"
 	canonical := baseURL + "/categories/" + url.PathEscape(cat.Slug)
@@ -473,7 +473,8 @@ func (s *HTMLShellService) buildCategoryPayload(baseURL string, slug string) pag
 
 	catIDStr := strconv.FormatUint(uint64(cat.ID), 10)
 	expandedIDs, _ := expandPublicCategoryIDs(s.categoryRepo, catIDStr)
-	products := s.listActiveProductsSafe(catIDStr, expandedIDs, 60)
+	// 输出该分类（含子分类）全部上架商品，不分页
+	products := s.listActiveProductsSafe(catIDStr, expandedIDs, sitemapMaxFetch)
 
 	var snap strings.Builder
 	snap.WriteString(`<main class="seo-shell-category">`)
@@ -515,6 +516,8 @@ func (s *HTMLShellService) buildCategoryPayload(baseURL string, slug string) pag
 		Canonical:   canonical,
 		OGType:      "website",
 		OGImage:     ogImage,
+		// 没有可收录商品的分类（如尚未上架的教材版本，或只有 noindex 商品）是空页面，不让搜索引擎收录；上架商品后自动恢复
+		NoIndex: countIndexableProducts(products) == 0,
 		JSONLD:      []map[string]interface{}{breadcrumb},
 		Snapshot:    snap.String(),
 	}
@@ -962,7 +965,7 @@ func (s *HTMLShellService) buildNotFoundPayload(baseURL string) pageSeoPayload {
 func renderSiteNavLinksHTML() string {
 	return `<nav aria-label="站内与生态导航"><ul>` +
 		`<li><a href="/">备课箱商城首页</a></li>` +
-		`<li><a href="/products">小学科学全版本课件资源中心</a></li>` +
+		`<li><a href="/products">` + productsCenterHeading + `</a></li>` +
 		`<li><a href="/blog">小学科学备课教研专栏</a></li>` +
 		`<li><a href="/notice">商城公告</a></li>` +
 		`<li><a href="https://beikevip.site/">备课箱官网</a></li>` +

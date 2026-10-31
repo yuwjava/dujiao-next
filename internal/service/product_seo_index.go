@@ -25,6 +25,37 @@ func productSEONoIndex(p *models.Product) bool {
 	return false
 }
 
+// countIndexableProducts 统计未标记 noindex 的商品数（分类页是否值得收录以此为准）
+func countIndexableProducts(products []models.Product) int {
+	n := 0
+	for i := range products {
+		if !productSEONoIndex(&products[i]) {
+			n++
+		}
+	}
+	return n
+}
+
+// categoryIDsWithIndexableProducts 有可收录商品的分类 ID 集合（含其全部祖先分类）
+func categoryIDsWithIndexableProducts(categories []models.Category, products []models.Product) map[uint]bool {
+	parentOf := make(map[uint]uint, len(categories))
+	for _, c := range categories {
+		parentOf[c.ID] = c.ParentID
+	}
+	result := map[uint]bool{}
+	for i := range products {
+		if productSEONoIndex(&products[i]) {
+			continue
+		}
+		// 沿父链向上标记；已标记即停，深度上限防止异常数据形成环
+		for id, depth := products[i].CategoryID, 0; id != 0 && !result[id] && depth < 16; depth++ {
+			result[id] = true
+			id = parentOf[id]
+		}
+	}
+	return result
+}
+
 // 教材版本在 schema sku 中的代码
 var productVersionSKUCodes = map[string]string{
 	"教科版": "JK",

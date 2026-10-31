@@ -175,8 +175,12 @@ func (s *SitemapService) collectURLs(baseURL string) ([]urlEntry, error) {
 		})
 	}
 
-	// 2. 启用的分类
+	// 2. 启用且有可收录商品的分类（空分类与分类页一样输出 noindex，不进 sitemap）
+	catsWithProducts := categoryIDsWithIndexableProducts(categories, products)
 	for _, cat := range categories {
+		if !catsWithProducts[cat.ID] {
+			continue
+		}
 		entries = append(entries, urlEntry{
 			Loc:        baseURL + "/categories/" + url.PathEscape(cat.Slug),
 			LastMod:    cat.CreatedAt.UTC().Format("2006-01-02"),
