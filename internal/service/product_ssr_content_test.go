@@ -44,13 +44,13 @@ func TestBuildProductResourceInfoHTML(t *testing.T) {
 			name:        "单元课件",
 			title:       "教科版小科六上第四单元《计量时间》单元课件",
 			fulfillment: constants.FulfillmentTypeAuto,
-			want:        `<section class="resource-info"><h2>资源包信息</h2><dl><dt>教材版本</dt><dd>教科版</dd><dt>年级册次</dt><dd>六年级上册</dd><dt>单元</dt><dd>第四单元《计量时间》</dd><dt>资源类型</dt><dd>单元课件</dd><dt>交付格式</dt><dd>PPT课件、教学设计</dd><dt>发货方式</dt><dd>付款后自动发货</dd></dl></section>`,
+			want:        `<section class="resource-info"><h2>资源包信息</h2><dl><dt>教材版本</dt><dd>教科版</dd><dt>年级册次</dt><dd>六年级上册</dd><dt>单元</dt><dd>第四单元《计量时间》</dd><dt>资源类型</dt><dd>单元课件</dd><dt>交付格式</dt><dd>PPT课件、教学设计</dd><dt>适配大屏设备</dt><dd>希沃</dd><dt>发货方式</dt><dd>付款后自动发货</dd></dl></section>`,
 		},
 		{
 			name:        "未写单元号的单元课件",
 			title:       "教科版小科五下《热》单元课件",
 			fulfillment: constants.FulfillmentTypeAuto,
-			want:        `<section class="resource-info"><h2>资源包信息</h2><dl><dt>教材版本</dt><dd>教科版</dd><dt>年级册次</dt><dd>五年级下册</dd><dt>单元</dt><dd>《热》</dd><dt>资源类型</dt><dd>单元课件</dd><dt>交付格式</dt><dd>PPT课件、教学设计</dd><dt>发货方式</dt><dd>付款后自动发货</dd></dl></section>`,
+			want:        `<section class="resource-info"><h2>资源包信息</h2><dl><dt>教材版本</dt><dd>教科版</dd><dt>年级册次</dt><dd>五年级下册</dd><dt>单元</dt><dd>《热》</dd><dt>资源类型</dt><dd>单元课件</dd><dt>交付格式</dt><dd>PPT课件、教学设计</dd><dt>适配大屏设备</dt><dd>希沃</dd><dt>发货方式</dt><dd>付款后自动发货</dd></dl></section>`,
 		},
 		{
 			name:        "知识手册写 Word，人工发货",

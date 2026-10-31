@@ -11,6 +11,9 @@ import (
 	"golang.org/x/net/html/atom"
 )
 
+// productCoursewareTestedDevices 课件已实测可用的教学大屏（2026-10-31 确认希沃；未实测的设备不要写入）
+const productCoursewareTestedDevices = "希沃"
+
 // 商品正文 SSR 输出允许保留的语义标签（全部去掉属性）
 var productContentAllowedTags = map[atom.Atom]bool{
 	atom.H2: true, atom.H3: true, atom.H4: true,
@@ -101,6 +104,7 @@ func buildProductResourceInfoHTML(productTitle string, fulfillmentType string) s
 			field{"单元", p.unitLabel() + "《" + p.Lesson + "》"},
 			field{"资源类型", "单元课件"},
 			field{"交付格式", "PPT课件、教学设计"},
+			field{"适配大屏设备", productCoursewareTestedDevices},
 		)
 	case productKindHandbook:
 		fields = append(fields,
@@ -111,6 +115,7 @@ func buildProductResourceInfoHTML(productTitle string, fulfillmentType string) s
 		fields = append(fields,
 			field{"资源类型", "《开学第一课》起始课"},
 			field{"交付格式", "PPT课件、教学设计、逐字稿"},
+			field{"适配大屏设备", productCoursewareTestedDevices},
 		)
 	}
 	switch fulfillmentType {
