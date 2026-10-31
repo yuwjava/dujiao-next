@@ -36,8 +36,10 @@ const (
 	defaultTemplateFetchTimeout = 2 * time.Second
 
 	verticalHomeTitle       = "备课箱商城｜小学科学课件_教学设计_逐字稿_新课标同步备课资源"
-	verticalHomeDescription = "备课箱商城专注小学科学同步备课资料，覆盖教科版、苏教版、粤教版、人教版、大象版1-6年级可编辑PPT课件、教学设计、课堂逐字稿与同步练习，支持微信支付宝免注册自动发货。"
-	verticalHomeKeywords    = "小学科学课件,小学科学教案,科学逐字稿,教科版科学课件,苏教版科学课件,粤教版科学课件,人教版科学课件,大象版科学课件,2022新课标科学,备课箱商城"
+	// 对外口径只写已上架的版本与真实交付物（人教版、大象版尚无商品；图片版课件不可编辑）
+	verticalHomeDescription = "备课箱商城专注小学科学同步备课资源：教科版、苏教版、粤教版单元课件（含PPT课件与教学设计）、知识手册与开学第一课起始课，扫码购买，自动发货。"
+	verticalHomeKeywords    = "小学科学课件,小学科学教案,科学逐字稿,教科版科学课件,苏教版科学课件,粤教版科学课件,2022新课标科学,备课箱商城"
+	verticalProductsDesc    = "浏览备课箱小学科学同步备课资源：教科版、苏教版、粤教版单元课件（含PPT课件与教学设计）、知识手册与开学第一课起始课。"
 )
 
 // fallbackMinimalHTMLShell 当内网前端容器暂不可达（如单测或本地独立启动）时使用的标准 HTML5 最小壳
@@ -383,7 +385,7 @@ func (s *HTMLShellService) buildHomePayload(baseURL string) pageSeoPayload {
 // buildProductsPayload 构建全部商品中心页面 SEO 载荷
 func (s *HTMLShellService) buildProductsPayload(baseURL string) pageSeoPayload {
 	title := "小学科学全版本课件资源中心 - 备课箱"
-	desc := "浏览备课箱小学科学全版本同步备课资源，涵盖教科版、苏教版、粤教版、人教版、大象版1-6年级可编辑PPT课件、教学设计、课堂逐字稿与同步练习源文件。"
+	desc := verticalProductsDesc
 	canonical := baseURL + "/products"
 
 	categories := s.listActiveCategoriesSafe()
@@ -464,7 +466,8 @@ func (s *HTMLShellService) buildCategoryPayload(baseURL string, slug string) pag
 	catName := localizedJSONText(cat.NameJSON, cat.Slug)
 	h1Text := catName + "小学科学课件"
 	title := catName + "小学科学课件｜按年级单元选课 - 备课箱"
-	desc := catName + "小学科学同步备课资源专区，提供1-6年级上下册可编辑PPT课件、教学设计、课堂逐字稿与随堂练习源文件，付款秒级自动发货。"
+	// 分类里也有“小工具”“PPT模板”这类非课件分类，描述只写对任何分类都成立的内容
+	desc := "备课箱商城「" + catName + "」分类：浏览该分类下全部在售的小学科学备课资源，扫码购买，自动发货。"
 	canonical := baseURL + "/categories/" + url.PathEscape(cat.Slug)
 	ogImage := resolveAbsoluteAssetURL(baseURL, cat.Icon)
 
@@ -857,7 +860,7 @@ func (s *HTMLShellService) buildPostDetailPayload(baseURL string, slug string) p
 // buildAboutPayload 构建关于我们页面 SEO 载荷与主站互链快照
 func (s *HTMLShellService) buildAboutPayload(baseURL string) pageSeoPayload {
 	title := "关于备课箱商城 - 备课箱"
-	desc := "备课箱专注小学科学新课标同步教学资源研发，提供教科版、苏教版、粤教版、人教版、大象版1-6年级精品课件、教案、逐字稿及免费互动数字实验室。"
+	desc := "备课箱专注小学科学新课标同步教学资源研发，提供教科版、苏教版、粤教版课件、教学设计、逐字稿及免费互动数字实验室。"
 	canonical := baseURL + "/about"
 
 	var snap strings.Builder

@@ -123,7 +123,7 @@ func TestHTMLShellServiceHomeAndTemplateETagCache(t *testing.T) {
 		`<html lang="zh-CN">`,
 		`/assets/index-abc123.js`,
 		`<title>备课箱商城｜小学科学课件_教学设计_逐字稿_新课标同步备课资源</title>`,
-		`专注小学科学同步备课资料`,
+		`专注小学科学同步备课资源：教科版、苏教版、粤教版单元课件`,
 		`"@type":"WebSite"`,
 		`"@type":"EducationalOrganization"`,
 		`/categories/kejiaoban`,
