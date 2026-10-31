@@ -244,10 +244,14 @@ func TestHTMLShellServiceProductDetailAnd404Guard(t *testing.T) {
 			t.Fatalf("期望 200，实际 %d", res.StatusCode)
 		}
 
-		expectedDesc := "苏教版《声音的产生》小学科学同步备课资源包，内含可编辑PPT课件、教学设计、课堂逐字稿与同步练习源文件，对齐2022版科学新课标，支持微信/支付宝免注册扫码购买、秒级自动发货。"
+		// 商品名不属于教材同步格式，兜底描述退回商品短描述
+		expectedDesc := "四年级上册科学优质公开课全套素材"
 		mustHave := []string{
 			`<html lang="zh-CN">`,
-			expectedDesc,
+			`<meta name="description" content="` + expectedDesc + `"`,
+			`<title>声音的产生｜备课箱小学科学</title>`,
+			`"@type":"MerchantReturnPolicy"`,
+			`"returnPolicyCategory":"https://schema.org/MerchantReturnNotPermitted"`,
 			`<meta property="og:image" content="https://shop.beikevip.site/uploads/product/2026/10/cover.png" />`,
 			`<meta name="twitter:image" content="https://shop.beikevip.site/uploads/product/2026/10/cover.png" />`,
 			`"https://shop.beikevip.site/uploads/product/2026/10/cover.png"`,

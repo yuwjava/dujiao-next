@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"html"
 	"io"
 	"net/http"
@@ -540,20 +539,13 @@ func (s *HTMLShellService) buildProductDetailPayload(baseURL string, slug string
 	catName := localizedJSONText(product.Category.NameJSON, "")
 	canonical := baseURL + "/products/" + url.PathEscape(product.Slug)
 
-	// 标题：优先采用后台 seo_meta.title，否则使用商品标题
-	rawSeoTitle := strings.TrimSpace(extractLocalizedFieldFromMap(product.SeoMetaJSON, "title"))
-	pageTitle := prodTitle + " - 备课箱"
-	if rawSeoTitle != "" {
-		if strings.Contains(rawSeoTitle, "备课箱") {
-			pageTitle = rawSeoTitle
-		} else {
-			pageTitle = rawSeoTitle + " - 备课箱"
-		}
-	}
+	// 标题与描述：优先采用后台 seo_meta，否则按商品名解析结果套兜底模板（product_seo_meta.go）
+	rawSeoTitle := extractLocalizedFieldFromMap(product.SeoMetaJSON, "title")
+	pageTitle := BuildProductPageTitle(rawSeoTitle, prodTitle)
 
-	// 智能结构化描述兜底：当 seo_meta.description 为空、长度 <= 15 字符或与商品标题相同时自动合成
-	rawSeoDesc := strings.TrimSpace(extractLocalizedFieldFromMap(product.SeoMetaJSON, "description"))
-	finalDesc := BuildStructuredProductDescription(rawSeoDesc, prodTitle, catName)
+	shortDesc := strings.TrimSpace(localizedJSONText(product.DescriptionJSON, ""))
+	rawSeoDesc := extractLocalizedFieldFromMap(product.SeoMetaJSON, "description")
+	finalDesc := BuildStructuredProductDescription(rawSeoDesc, prodTitle, shortDesc)
 
 	// 关键词
 	rawKeywords := strings.TrimSpace(extractKeywordsFromSeoMeta(product.SeoMetaJSON))
@@ -593,6 +585,12 @@ func (s *HTMLShellService) buildProductDetailPayload(baseURL string, slug string
 			"priceCurrency": "CNY",
 			"availability":  availability,
 			"url":           canonical,
+			"hasMerchantReturnPolicy": map[string]interface{}{
+				"@type":                "MerchantReturnPolicy",
+				"applicableCountry":    "CN",
+				"returnPolicyCategory": "https://schema.org/MerchantReturnNotPermitted",
+				"description":          productReturnPolicyText,
+			},
 		},
 	}
 	if catName != "" {
@@ -613,7 +611,6 @@ func (s *HTMLShellService) buildProductDetailPayload(baseURL string, slug string
 	breadcrumbSchema := buildBreadcrumbJSONLD(bcItems)
 
 	// 构建 #app 内商品语义快照
-	shortDesc := strings.TrimSpace(localizedJSONText(product.DescriptionJSON, ""))
 	plainContent := truncateRunes(htmltext.StripToPlainText(localizedJSONText(product.ContentJSON, "")), 1200)
 
 	var snap strings.Builder
@@ -966,20 +963,6 @@ func renderSiteNavLinksHTML() string {
 		`<li><a href="https://beikevip.site/lab/">免费小学科学数字实验室</a></li>` +
 		`<li><a href="https://beikevip.site/about/">备课箱教研组简介</a></li>` +
 		`</ul></nav>`
-}
-
-// BuildStructuredProductDescription 生成商品详情智能结构化描述兜底
-func BuildStructuredProductDescription(rawSeoDesc string, productTitle string, categoryName string) string {
-	trimmedSeo := strings.TrimSpace(rawSeoDesc)
-	trimmedTitle := strings.TrimSpace(productTitle)
-	if trimmedSeo != "" && utf8.RuneCountInString(trimmedSeo) > 15 && trimmedSeo != trimmedTitle {
-		return trimmedSeo
-	}
-	trimmedCat := strings.TrimSpace(categoryName)
-	if trimmedCat != "" {
-		return fmt.Sprintf("%s《%s》小学科学同步备课资源包，内含可编辑PPT课件、教学设计、课堂逐字稿与同步练习源文件，对齐2022版科学新课标，支持微信/支付宝免注册扫码购买、秒级自动发货。", trimmedCat, trimmedTitle)
-	}
-	return fmt.Sprintf("《%s》小学科学同步备课资源包，内含可编辑PPT课件、教学设计、课堂逐字稿与同步练习源文件，对齐2022版科学新课标，支持微信/支付宝免注册扫码购买、秒级自动发货。", trimmedTitle)
 }
 
 // IsSummaryDuplicatedInContent 判断文章摘要是否与正文提取纯文本后的开头重复
