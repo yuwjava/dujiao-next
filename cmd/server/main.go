@@ -12,6 +12,7 @@ import (
 	"github.com/dujiao-next/internal/config"
 	"github.com/dujiao-next/internal/logger"
 	"github.com/dujiao-next/internal/models"
+	"github.com/dujiao-next/internal/service"
 	"github.com/dujiao-next/internal/version"
 	"github.com/dujiao-next/internal/web"
 
@@ -34,6 +35,11 @@ func main() {
 	// 避免运维操作时打印一堆无关日志。
 	if len(os.Args) >= 2 && os.Args[1] == "admin" {
 		runAdminSubcommand(os.Args[2:])
+		return
+	}
+	// webp-backfill 子命令：./dujiao-api webp-backfill [-dir uploads] [-dry-run]
+	if len(os.Args) >= 2 && os.Args[1] == "webp-backfill" {
+		runWebPBackfillSubcommand(os.Args[2:])
 		return
 	}
 
@@ -159,6 +165,32 @@ func runAdminSubcommand(args []string) {
 		os.Exit(1)
 	}
 	admincmd.Run(args)
+}
+
+// runWebPBackfillSubcommand 一次性给已有上传图片补齐 .webp 副本与 480/960/1440 三档宽度，
+// 已存在的文件不重做，可重复执行。不连接数据库、不启动服务。
+func runWebPBackfillSubcommand(args []string) {
+	fs := flag.NewFlagSet("webp-backfill", flag.ExitOnError)
+	dir := fs.String("dir", "uploads", "上传目录（容器内默认工作目录下的 uploads）")
+	dryRun := fs.Bool("dry-run", false, "只列出需要补齐的图片，不生成文件")
+	_ = fs.Parse(args)
+
+	// debug 模式直接输出到终端，失败档位的告警与进度一起显示
+	logger.Init("debug", logger.Options{})
+	svc := service.NewUploadService(nil)
+	images, stats, err := svc.BackfillWebPDerivatives(*dir, *dryRun, os.Stdout)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "webp-backfill 失败: %v\n", err)
+		os.Exit(1)
+	}
+	if *dryRun {
+		fmt.Printf("演练完成：%d 张图片需要补齐，共缺 %d 个文件\n", images, stats.Skipped)
+		return
+	}
+	fmt.Printf("完成：处理 %d 张图片，生成 %d 个文件，跳过已有 %d 个，失败 %d 个\n", images, stats.Generated, stats.Skipped, stats.Failed)
+	if stats.Failed > 0 {
+		os.Exit(1)
+	}
 }
 
 // resolveDefaultAdminCredentials 解析默认管理员初始化凭据（环境变量优先，其次 config.yml）

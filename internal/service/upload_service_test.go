@@ -228,15 +228,15 @@ func TestUploadServiceWebPSidecarGeneration(t *testing.T) {
 	pngBytes := encodeSamplePNG(t)
 	jpgBytes := encodeSampleJPEG(t)
 
-	t.Run("存在 cwebp 时旁路生成同名 .webp 副本", func(t *testing.T) {
+	t.Run("存在 cwebp 时旁路生成同名 .webp 副本与三档宽度", func(t *testing.T) {
 		svc := NewUploadService(cfg)
-		var capturedArgs []string
+		var calls [][]string
 		svc.cwebpLookPath = func(file string) (string, error) {
 			return "/usr/bin/cwebp", nil
 		}
 		svc.cwebpRunner = func(ctx context.Context, bin string, args ...string) ([]byte, error) {
-			capturedArgs = append([]string(nil), args...)
-			// args 格式: -q 82 -mt <savePath> -o <savePath>.webp
+			calls = append(calls, append([]string(nil), args...))
+			// args 格式: -q 82 -mt [-resize W 0] <savePath> -o <目标>
 			target := args[len(args)-1]
 			if writeErr := os.WriteFile(target, []byte("RIFFmockWEBP"), 0644); writeErr != nil {
 				return nil, writeErr
@@ -259,9 +259,15 @@ func TestUploadServiceWebPSidecarGeneration(t *testing.T) {
 			t.Fatalf("旁路 .webp 副本未生成: %v", statErr)
 		}
 
-		expectedArgs := []string{"-q", "82", "-mt", localOrig, "-o", localWebP}
-		if !reflect.DeepEqual(capturedArgs, expectedArgs) {
-			t.Fatalf("cwebp 调用参数不符，实际 %v，期望 %v", capturedArgs, expectedArgs)
+		// 样例图很小，不比任何一档宽，所以各档都按原尺寸转换、不带 -resize
+		expectedCalls := [][]string{
+			{"-q", "82", "-mt", localOrig, "-o", localWebP},
+			{"-q", "82", "-mt", localOrig, "-o", localOrig + ".w480.webp"},
+			{"-q", "82", "-mt", localOrig, "-o", localOrig + ".w960.webp"},
+			{"-q", "82", "-mt", localOrig, "-o", localOrig + ".w1440.webp"},
+		}
+		if !reflect.DeepEqual(calls, expectedCalls) {
+			t.Fatalf("cwebp 调用参数不符，实际 %v，期望 %v", calls, expectedCalls)
 		}
 	})
 

@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/dujiao-next/internal/config"
-	"github.com/dujiao-next/internal/logger"
 
 	_ "image/gif"
 	_ "image/jpeg"
@@ -210,9 +209,10 @@ func (s *UploadService) SaveFileWithMeta(file *multipart.FileHeader, scene strin
 		return nil, closeErr
 	}
 
-	// 当原图是 .png / .jpg / .jpeg 时，尝试旁路生成同名 .webp 副本（失败仅记日志，绝不阻断原图上传）
+	// 当原图是 .png / .jpg / .jpeg 时，旁路生成同名 .webp 副本与 480/960/1440 三档宽度（失败仅记日志，绝不阻断原图上传）
 	if shouldGenerateWebPSidecar(ext) {
-		s.tryGenerateWebPSidecar(savePath)
+		// 开发环境或未安装 libwebp-tools 时 GenerateWebPDerivatives 返回 errCwebpNotFound，静默跳过
+		_, _ = s.GenerateWebPDerivatives(savePath, imgWidth, false)
 	}
 
 	return &UploadResult{
@@ -232,40 +232,6 @@ func shouldGenerateWebPSidecar(ext string) bool {
 		return true
 	default:
 		return false
-	}
-}
-
-// tryGenerateWebPSidecar 在原图同路径旁路生成 <savePath>.webp；系统无 cwebp 时静默跳过，执行失败仅记录警告日志
-func (s *UploadService) tryGenerateWebPSidecar(savePath string) {
-	lookPath := s.cwebpLookPath
-	if lookPath == nil {
-		lookPath = exec.LookPath
-	}
-	cwebpBin, err := lookPath("cwebp")
-	if err != nil || strings.TrimSpace(cwebpBin) == "" {
-		// 开发环境或未安装 libwebp-tools 时静默跳过
-		return
-	}
-
-	runner := s.cwebpRunner
-	if runner == nil {
-		runner = func(ctx context.Context, bin string, args ...string) ([]byte, error) {
-			return exec.CommandContext(ctx, bin, args...).CombinedOutput()
-		}
-	}
-
-	webpPath := savePath + ".webp"
-	ctx, cancel := context.WithTimeout(context.Background(), webpSidecarTimeout)
-	defer cancel()
-
-	out, runErr := runner(ctx, cwebpBin, "-q", "82", "-mt", savePath, "-o", webpPath)
-	if runErr != nil {
-		logger.Warnw("upload_generate_webp_failed",
-			"source", savePath,
-			"target", webpPath,
-			"error", runErr,
-			"output", strings.TrimSpace(string(out)),
-		)
 	}
 }
 
