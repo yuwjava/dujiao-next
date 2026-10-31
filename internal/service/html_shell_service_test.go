@@ -172,7 +172,7 @@ func TestHTMLShellServiceProductDetailAnd404Guard(t *testing.T) {
 		TitleJSON:       models.JSON{"zh-CN": "声音的产生"},
 		SeoMetaJSON:     models.JSON{"description": models.JSON{"zh-CN": "声音的产生"}},
 		DescriptionJSON: models.JSON{"zh-CN": "四年级上册科学优质公开课全套素材"},
-		ContentJSON:     models.JSON{"zh-CN": "<p>本课包含实验演示视频与可编辑希沃/PPT课件。</p>"},
+		ContentJSON:     models.JSON{"zh-CN": `<h3>资料内容</h3><p onclick="alert('xss')">本课包含实验演示视频与可编辑希沃/PPT课件。</p><script>alert('xss')</script>`},
 		Images:          models.StringArray{"/uploads/product/2026/10/cover.png"},
 		Tags:            models.StringArray{"苏教版", "四年级上册"},
 		PriceAmount:     models.NewMoneyFromDecimal(decimal.NewFromFloat(12.8)),
@@ -261,12 +261,16 @@ func TestHTMLShellServiceProductDetailAnd404Guard(t *testing.T) {
 			`"name":"备课箱"`,
 			`<h1>声音的产生</h1>`,
 			`/categories/sujiaoban`,
-			`本课包含实验演示视频与可编辑希沃/PPT课件。`,
+			// 正文完整输出为白名单语义 HTML，属性与脚本被过滤
+			`<section class="content"><h3>资料内容</h3><p>本课包含实验演示视频与可编辑希沃/PPT课件。</p></section>`,
 		}
 		for _, s := range mustHave {
 			if !strings.Contains(res.HTML, s) {
 				t.Errorf("商品详情页缺少期望内容 %q\n实际 HTML:\n%s", s, res.HTML)
 			}
+		}
+		if strings.Contains(res.HTML, "alert('xss')") {
+			t.Errorf("商品正文中的脚本与事件属性应被过滤")
 		}
 		if strings.Contains(res.HTML, "noindex") {
 			t.Errorf("有效商品页不应包含 noindex")

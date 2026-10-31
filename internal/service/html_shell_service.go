@@ -610,8 +610,9 @@ func (s *HTMLShellService) buildProductDetailPayload(baseURL string, slug string
 	bcItems = append(bcItems, breadcrumbItem{Name: prodTitle, URL: canonical})
 	breadcrumbSchema := buildBreadcrumbJSONLD(bcItems)
 
-	// 构建 #app 内商品语义快照
-	plainContent := truncateRunes(htmltext.StripToPlainText(localizedJSONText(product.ContentJSON, "")), 1200)
+	// 构建 #app 内商品语义快照：正文完整输出为白名单语义 HTML，并附资源包信息与可选规格（product_ssr_content.go）
+	contentHTML := sanitizeProductContentHTML(localizedJSONText(product.ContentJSON, ""))
+	contentPlain := strings.TrimSpace(htmltext.StripToPlainText(contentHTML))
 
 	var snap strings.Builder
 	snap.WriteString(`<main class="seo-shell-product-detail"><article>`)
@@ -656,10 +657,13 @@ func (s *HTMLShellService) buildProductDetailPayload(baseURL string, slug string
 	}
 	snap.WriteString(`</p>`)
 
-	if plainContent != "" && plainContent != shortDesc {
-		snap.WriteString(`<div class="content-excerpt"><p>`)
-		snap.WriteString(html.EscapeString(plainContent))
-		snap.WriteString(`</p></div>`)
+	snap.WriteString(buildProductResourceInfoHTML(prodTitle, product.FulfillmentType))
+	snap.WriteString(buildProductSpecListHTML(product.SKUs))
+
+	if contentHTML != "" && contentPlain != shortDesc {
+		snap.WriteString(`<section class="content">`)
+		snap.WriteString(contentHTML)
+		snap.WriteString(`</section>`)
 	}
 	snap.WriteString(`</article></main>`)
 
