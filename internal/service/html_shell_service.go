@@ -387,7 +387,8 @@ func (s *HTMLShellService) buildProductsPayload(baseURL string) pageSeoPayload {
 	canonical := baseURL + "/products"
 
 	categories := s.listActiveCategoriesSafe()
-	products := s.listActiveProductsSafe("", nil, 50)
+	// 输出全部上架商品链接、不分页，保证爬虫从商品中心就能发现每个商品
+	products := s.listActiveProductsSafe("", nil, sitemapMaxFetch)
 
 	var snap strings.Builder
 	snap.WriteString(`<main class="seo-shell-products">`)
@@ -565,8 +566,9 @@ func (s *HTMLShellService) buildProductDetailPayload(baseURL string, slug string
 		absImages = []string{DefaultOGImageURL}
 	}
 
-	// SKU 编码、展示价格与库存可用性
-	skuCode, displayPrice, availability := resolveProductOfferMeta(product, s.productService != nil)
+	// 展示价格与库存可用性；schema sku 用全局唯一编码（数据库 sku_code 只在商品内唯一）
+	_, displayPrice, availability := resolveProductOfferMeta(product, s.productService != nil)
+	skuCode := BuildProductSchemaSKU(product)
 
 	productSchema := map[string]interface{}{
 		"@context":    "https://schema.org",
@@ -675,6 +677,7 @@ func (s *HTMLShellService) buildProductDetailPayload(baseURL string, slug string
 		Canonical:   canonical,
 		OGType:      "product",
 		OGImage:     primaryImage,
+		NoIndex:     productSEONoIndex(product),
 		JSONLD:      []map[string]interface{}{productSchema, breadcrumbSchema},
 		Snapshot:    snap.String(),
 	}
@@ -1483,7 +1486,8 @@ func renderHeadTags(p pageSeoPayload) string {
 		if err != nil {
 			continue
 		}
-		b.WriteString(`    <script type="application/ld+json">`)
+		// data-ssr 标记服务端已输出的结构化数据，前台据此跳过同类型的重复注入
+		b.WriteString(`    <script type="application/ld+json" data-ssr="1">`)
 		b.Write(rawJSON)
 		b.WriteString(`</script>` + "\n")
 	}

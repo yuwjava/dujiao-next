@@ -185,8 +185,12 @@ func (s *SitemapService) collectURLs(baseURL string) ([]urlEntry, error) {
 		})
 	}
 
-	// 3. 上架的商品（OnlyActive 已含分类启用过滤）
-	for _, p := range products {
+	// 3. 上架的商品（OnlyActive 已含分类启用过滤；后台标记 noindex 的商品不进 sitemap）
+	for i := range products {
+		p := &products[i]
+		if productSEONoIndex(p) {
+			continue
+		}
 		entries = append(entries, urlEntry{
 			Loc:        baseURL + "/products/" + url.PathEscape(p.Slug),
 			LastMod:    p.UpdatedAt.UTC().Format("2006-01-02"),

@@ -257,7 +257,9 @@ func TestHTMLShellServiceProductDetailAnd404Guard(t *testing.T) {
 			`"https://shop.beikevip.site/uploads/product/2026/10/cover.png"`,
 			`"@type":"Product"`,
 			`"@type":"BreadcrumbList"`,
-			`"sku":"SJ-4A-SOUND-FULL"`,
+			// 商品名无法解析时 schema sku 为 BK-{商品ID}，不再使用只在商品内唯一的 sku_code
+			fmt.Sprintf(`"sku":"BK-%d"`, activeProd.ID),
+			`<script type="application/ld+json" data-ssr="1">`,
 			`"name":"备课箱"`,
 			`<h1>声音的产生</h1>`,
 			`/categories/sujiaoban`,
@@ -299,6 +301,67 @@ func TestHTMLShellServiceProductDetailAnd404Guard(t *testing.T) {
 			if res.StatusCode != http.StatusNotFound {
 				t.Fatalf("不可见商品 %s 期望 404，实际 %d", slug, res.StatusCode)
 			}
+		}
+	})
+
+	t.Run("后台标记 noindex 的商品仍返回 200，但输出 noindex 且无 canonical", func(t *testing.T) {
+		tpl := models.Product{
+			CategoryID:      cat.ID,
+			Slug:            "ppt-template",
+			TitleJSON:       models.JSON{"zh-CN": "免费PPT模板"},
+			SeoMetaJSON:     models.JSON{"noindex": true},
+			PriceAmount:     models.NewMoneyFromDecimal(decimal.NewFromInt(0)),
+			PurchaseType:    constants.ProductPurchaseGuest,
+			FulfillmentType: constants.FulfillmentTypeAuto,
+			IsActive:        true,
+		}
+		if err := db.Create(&tpl).Error; err != nil {
+			t.Fatalf("创建模板商品失败: %v", err)
+		}
+		res, err := svc.Render(context.Background(), "/products/ppt-template", "https://shop.beikevip.site")
+		if err != nil {
+			t.Fatalf("渲染失败: %v", err)
+		}
+		if res.StatusCode != http.StatusOK {
+			t.Fatalf("noindex 商品仍应可访问，期望 200，实际 %d", res.StatusCode)
+		}
+		if !strings.Contains(res.HTML, `<meta name="robots" content="noindex, nofollow" />`) {
+			t.Errorf("noindex 商品页缺少 robots noindex")
+		}
+		if strings.Contains(res.HTML, `rel="canonical"`) {
+			t.Errorf("noindex 商品页不应输出 canonical")
+		}
+	})
+
+	t.Run("商品中心输出全部上架商品链接，不受 50 个上限限制", func(t *testing.T) {
+		for i := 0; i < 60; i++ {
+			p := models.Product{
+				CategoryID:      cat.ID,
+				Slug:            fmt.Sprintf("bulk-%02d", i),
+				TitleJSON:       models.JSON{"zh-CN": fmt.Sprintf("批量商品%02d", i)},
+				PriceAmount:     models.NewMoneyFromDecimal(decimal.NewFromInt(1)),
+				PurchaseType:    constants.ProductPurchaseGuest,
+				FulfillmentType: constants.FulfillmentTypeAuto,
+				IsActive:        true,
+			}
+			if err := db.Create(&p).Error; err != nil {
+				t.Fatalf("创建批量商品失败: %v", err)
+			}
+		}
+		var activeCount int64
+		if err := db.Model(&models.Product{}).Where("is_active = ?", true).Count(&activeCount).Error; err != nil {
+			t.Fatalf("统计上架商品失败: %v", err)
+		}
+		// 全停用 SKU 的商品自身 is_active 但前台不可见，不应计入
+		expected := int(activeCount) - 1
+
+		res, err := svc.Render(context.Background(), "/products", "https://shop.beikevip.site")
+		if err != nil {
+			t.Fatalf("渲染商品中心失败: %v", err)
+		}
+		got := strings.Count(res.HTML, `<li><a href="/products/`)
+		if got != expected {
+			t.Errorf("商品中心链接数期望 %d，实际 %d", expected, got)
 		}
 	})
 }

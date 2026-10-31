@@ -96,6 +96,20 @@ func TestSitemapServiceIncludesActiveContent(t *testing.T) {
 		t.Fatalf("create hidden-category product: %v", err)
 	}
 
+	noindexProduct := models.Product{
+		CategoryID:      activeCategory.ID,
+		Slug:            "noindex-template",
+		TitleJSON:       models.JSON{"zh-CN": "p"},
+		SeoMetaJSON:     models.JSON{"noindex": true},
+		PriceAmount:     models.NewMoneyFromDecimal(decimal.NewFromInt(10)),
+		PurchaseType:    constants.ProductPurchaseMember,
+		FulfillmentType: constants.FulfillmentTypeManual,
+		IsActive:        true,
+	}
+	if err := db.Create(&noindexProduct).Error; err != nil {
+		t.Fatalf("create noindex product: %v", err)
+	}
+
 	publishedPost := models.Post{
 		Slug:        "hello",
 		Type:        constants.PostTypeBlog,
@@ -140,6 +154,7 @@ func TestSitemapServiceIncludesActiveContent(t *testing.T) {
 		"draft-product",      // 下架商品
 		"in-hidden-category", // 分类停用下的商品
 		"/blog/draft",        // 未发布文章
+		"noindex-template",   // 后台标记 noindex 的商品
 	}
 	for _, s := range mustNotContain {
 		if strings.Contains(xmlStr, s) {
