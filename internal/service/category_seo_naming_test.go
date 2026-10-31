@@ -29,6 +29,20 @@ func TestCategoryHeadingAndTitle(t *testing.T) {
 	}
 }
 
+func TestWithSiteSuffix(t *testing.T) {
+	cases := map[string]string{
+		"复习的本质：把散的连起来":       "复习的本质：把散的连起来 - 备课箱",
+		"备课箱 | 复习的本质：把散的连起来": "备课箱 | 复习的本质：把散的连起来",
+		"  计量时间单元复习  ":       "计量时间单元复习 - 备课箱",
+		"小学科学备课箱使用指南":        "小学科学备课箱使用指南",
+	}
+	for in, want := range cases {
+		if got := withSiteSuffix(in); got != want {
+			t.Errorf("withSiteSuffix(%q) = %q；期望 %q", in, got, want)
+		}
+	}
+}
+
 func TestCategoryIDsWithIndexableProducts(t *testing.T) {
 	// 1 小学科学 ─┬─ 2 教科版（有商品）
 	//            └─ 6 大象版（空）

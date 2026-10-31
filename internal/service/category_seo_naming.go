@@ -23,7 +23,17 @@ func categoryHeading(catName string) string {
 	}
 }
 
-// categoryPageTitle 分类页 <title>（不含站点后缀时由调用方追加“ - 备课箱”）
+// withSiteSuffix 页面标题追加站点后缀“ - 备课箱”；标题里已含“备课箱”时不再追加，
+// 与 user/src/composables/usePageSeo.ts 的 fullTitle 规则一致，避免“备课箱 | xxx - 备课箱”这类重复
+func withSiteSuffix(title string) string {
+	t := strings.TrimSpace(title)
+	if strings.Contains(t, "备课箱") {
+		return t
+	}
+	return t + " - 备课箱"
+}
+
+// categoryPageTitle 分类页完整 <title>
 func categoryPageTitle(catName string) string {
 	name := strings.TrimSpace(catName)
 	switch {

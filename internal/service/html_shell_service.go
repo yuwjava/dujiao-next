@@ -849,7 +849,7 @@ func (s *HTMLShellService) buildPostDetailPayload(baseURL string, slug string) p
 
 	return pageSeoPayload{
 		StatusCode:  http.StatusOK,
-		Title:       postTitle + " - 备课箱",
+		Title:       withSiteSuffix(postTitle),
 		Description: desc,
 		Keywords:    verticalHomeKeywords,
 		Canonical:   canonical,
