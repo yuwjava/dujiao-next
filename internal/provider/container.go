@@ -263,6 +263,7 @@ func (c *Container) initServices() {
 		PostRepo:       c.PostRepo,
 		SettingService: c.SettingService,
 		ProductService: c.ProductService,
+		BaiduTongjiID:  c.Config.Web.BaiduTongjiID,
 	})
 	c.CartService = service.NewCartService(c.CartRepo, c.ProductRepo, c.ProductSKURepo, c.PromotionRepo, c.SettingService)
 	c.WalletService = service.NewWalletService(c.WalletRepo, c.OrderRepo, c.OrderRefundRecordRepo, c.UserRepo, c.AffiliateService, c.SettingService)

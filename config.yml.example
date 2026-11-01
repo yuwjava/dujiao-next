@@ -149,3 +149,6 @@ web:
   # 强烈建议改成不易猜测的字符串以降低自动化扫描风险
   # 例如: "/dj-mgmt-7x9k2" 或 "/console-private"
   admin_path: "/admin"
+  # 百度统计站点 ID（统计后台「代码获取」里 hm.js? 后面那串 32 位字符）
+  # 留空则不注入统计代码；也可用环境变量 WEB_BAIDU_TONGJI_ID 设置
+  baidu_tongji_id: ""

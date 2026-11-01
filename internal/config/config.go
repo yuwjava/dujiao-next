@@ -268,6 +268,9 @@ type WebConfig struct {
 	// AdminPath 后台访问路径前缀，例如 "/admin" 或 "/dj-mgmt-7x9k2"。
 	// 校验规则见 internal/web.ValidateAdminPath。
 	AdminPath string `mapstructure:"admin_path"`
+	// BaiduTongjiID 百度统计站点 ID（32 位十六进制）。留空则不注入统计代码。
+	// 只在页面 HTML 壳里注入这一处，前台路由切换与转化事件由前端补报。
+	BaiduTongjiID string `mapstructure:"baidu_tongji_id"`
 }
 
 // Load 从 config.yml 加载配置
@@ -387,6 +390,7 @@ func Load() *Config {
 	viper.SetDefault("captcha.turnstile.verify_url", "https://challenges.cloudflare.com/turnstile/v0/siteverify")
 	viper.SetDefault("captcha.turnstile.timeout_ms", 2000)
 	viper.SetDefault("web.admin_path", "/admin")
+	viper.SetDefault("web.baidu_tongji_id", "")
 
 	// 环境变量支持
 	viper.AutomaticEnv()                                   // 自动读取环境变量

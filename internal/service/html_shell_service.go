@@ -35,7 +35,7 @@ const (
 	defaultTemplateErrorBackoff = 5 * time.Second
 	defaultTemplateFetchTimeout = 2 * time.Second
 
-	verticalHomeTitle       = "备课箱商城｜小学科学课件_教学设计_逐字稿_新课标同步备课资源"
+	verticalHomeTitle = "备课箱商城｜小学科学课件_教学设计_逐字稿_新课标同步备课资源"
 	// 对外口径只写已上架的版本与真实交付物（人教版、大象版尚无商品；图片版课件不可编辑）
 	verticalHomeDescription = "备课箱商城专注小学科学同步备课资源：教科版、苏教版、粤教版单元课件（含PPT课件与教学设计）、知识手册与开学第一课起始课，扫码购买，自动发货。"
 	verticalHomeKeywords    = "小学科学课件,小学科学教案,科学逐字稿,教科版科学课件,苏教版科学课件,粤教版科学课件,2022新课标科学,备课箱商城"
@@ -75,6 +75,8 @@ type HTMLShellOptions struct {
 	TemplateURL    string
 	TemplateTTL    time.Duration
 	HTTPClient     *http.Client
+	// BaiduTongjiID 百度统计站点 ID，来自 config.yml 的 web.baidu_tongji_id；不合法或留空则不注入
+	BaiduTongjiID string
 }
 
 // HTMLPageResult 页面级 HTML 渲染结果
@@ -104,9 +106,10 @@ type HTMLShellService struct {
 	settingService *SettingService
 	productService *ProductService
 
-	templateURL string
-	templateTTL time.Duration
-	httpClient  *http.Client
+	templateURL   string
+	templateTTL   time.Duration
+	httpClient    *http.Client
+	baiduTongjiID string
 
 	mu         sync.RWMutex
 	cachedHTML string
@@ -143,6 +146,7 @@ func NewHTMLShellService(opts HTMLShellOptions) *HTMLShellService {
 		templateURL:    tplURL,
 		templateTTL:    ttl,
 		httpClient:     client,
+		baiduTongjiID:  normalizeBaiduTongjiSiteID(opts.BaiduTongjiID),
 	}
 }
 
@@ -151,7 +155,7 @@ func (s *HTMLShellService) Render(ctx context.Context, requestPath string, baseU
 	normalizedBase := normalizeSiteBaseURL(baseURL)
 	payload := s.buildPagePayload(requestPath, normalizedBase)
 	shell := s.loadTemplateShell(ctx)
-	rendered := injectIntoHTMLShell(shell, payload)
+	rendered := injectBaiduTongji(injectIntoHTMLShell(shell, payload), s.baiduTongjiID)
 	return &HTMLPageResult{
 		StatusCode: payload.StatusCode,
 		HTML:       rendered,
@@ -517,9 +521,9 @@ func (s *HTMLShellService) buildCategoryPayload(baseURL string, slug string) pag
 		OGType:      "website",
 		OGImage:     ogImage,
 		// 没有可收录商品的分类（如尚未上架的教材版本，或只有 noindex 商品）是空页面，不让搜索引擎收录；上架商品后自动恢复
-		NoIndex: countIndexableProducts(products) == 0,
-		JSONLD:      []map[string]interface{}{breadcrumb},
-		Snapshot:    snap.String(),
+		NoIndex:  countIndexableProducts(products) == 0,
+		JSONLD:   []map[string]interface{}{breadcrumb},
+		Snapshot: snap.String(),
 	}
 }
 
