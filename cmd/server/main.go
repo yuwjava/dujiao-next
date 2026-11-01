@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"syscall"
@@ -40,6 +41,11 @@ func main() {
 	// webp-backfill 子命令：./dujiao-api webp-backfill [-dir uploads] [-dry-run]
 	if len(os.Args) >= 2 && os.Args[1] == "webp-backfill" {
 		runWebPBackfillSubcommand(os.Args[2:])
+		return
+	}
+	// product-content-replace 子命令：./dujiao-api product-content-replace -rules <file|-> [-dry-run]
+	if len(os.Args) >= 2 && os.Args[1] == "product-content-replace" {
+		runProductContentReplaceSubcommand(os.Args[2:])
 		return
 	}
 
@@ -154,6 +160,12 @@ func isWeakSecret(secret string) bool {
 // runAdminSubcommand 处理 ./dujiao-api admin <subcommand>，仅初始化 DB
 // 后委托给 internal/admincmd 包，不启动 HTTP / worker / web 等服务。
 func runAdminSubcommand(args []string) {
+	initSubcommandDB()
+	admincmd.Run(args)
+}
+
+// initSubcommandDB 运维子命令共用：只加载配置并连接数据库，不跑迁移、不启动服务
+func initSubcommandDB() {
 	cfg := config.Load()
 	if err := models.InitDB(cfg.Database.Driver, cfg.Database.DSN, models.DBPoolConfig{
 		MaxOpenConns:           cfg.Database.Pool.MaxOpenConns,
@@ -164,7 +176,50 @@ func runAdminSubcommand(args []string) {
 		fmt.Fprintf(os.Stderr, "init db: %v\n", err)
 		os.Exit(1)
 	}
-	admincmd.Run(args)
+}
+
+// runProductContentReplaceSubcommand 按规则文件批量改写商品详情（只改 content_json 一列），
+// 用于统一商品页的固定说明段落。-rules - 表示从标准输入读取，便于 docker exec -i 传入。
+func runProductContentReplaceSubcommand(args []string) {
+	fs := flag.NewFlagSet("product-content-replace", flag.ExitOnError)
+	rulesPath := fs.String("rules", "", "规则文件路径（JSON 数组 [{\"old\":...,\"new\":...}]），- 表示标准输入")
+	dryRun := fs.Bool("dry-run", false, "只统计会改动的商品，不写数据库")
+	_ = fs.Parse(args)
+	if *rulesPath == "" {
+		fmt.Fprintln(os.Stderr, "用法: dujiao-api product-content-replace -rules <file|-> [-dry-run]")
+		os.Exit(1)
+	}
+
+	var in io.Reader = os.Stdin
+	if *rulesPath != "-" {
+		f, err := os.Open(*rulesPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "打开规则文件失败: %v\n", err)
+			os.Exit(1)
+		}
+		defer f.Close()
+		in = f
+	}
+	rules, err := service.ParseContentReplaceRules(in)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	initSubcommandDB()
+	report, err := service.ReplaceProductContent(models.DB, rules, *dryRun, os.Stdout)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "product-content-replace 失败: %v\n", err)
+		os.Exit(1)
+	}
+	for i, n := range report.Hits {
+		fmt.Printf("规则 #%d 命中 %d 次\n", i+1, n)
+	}
+	if *dryRun {
+		fmt.Printf("演练完成：扫描 %d 个商品，%d 个会被改动（未写入）\n", report.Scanned, report.Changed)
+		return
+	}
+	fmt.Printf("完成：扫描 %d 个商品，改动 %d 个\n", report.Scanned, report.Changed)
 }
 
 // runWebPBackfillSubcommand 一次性给已有上传图片补齐 .webp 副本与 480/960/1440 三档宽度，
